@@ -491,7 +491,7 @@ impl TitleTab {
             };
             square(&mut self.max_back, back, self.text_color, line);
             square(&mut self.max_front, front, self.text_color, line);
-            let fill_color = self.config.fill_color.unwrap_or(gradient.from);
+            let fill_color = fill.unwrap_or(gradient.from);
             square(&mut self.max_front_fill, front, fill_color, 0.);
         }
 
