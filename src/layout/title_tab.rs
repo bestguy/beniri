@@ -59,6 +59,8 @@ pub struct TitleTab {
     fillet_fill_l: BorderRenderElement,
     fillet_l_loc: Point<f64, Logical>,
     has_left_bend: bool,
+    /// Whether the tab sits on the frame's top-left corner (squaring it off).
+    attached_left: bool,
     /// Horizontal gap to the next tab in a row.
     row_gap: f64,
     /// The outline element is cut short so its right edge stops where the bend begins; this stub
@@ -122,6 +124,9 @@ pub struct FrameInfo {
     pub top_left_radius: f32,
     /// Width of the frame line, used for the outline style.
     pub line_width: f64,
+    /// Frame's top-left outer radius as if the focus ring were drawn, so rows of tabs start at
+    /// the same place whether or not the column is focused.
+    pub row_inset: f64,
     /// Whether a frame (focus ring or border) is actually drawn around this tile.
     pub frame_drawn: bool,
     /// Full frame rectangle relative to the tile origin, for window-relative gradients.
@@ -148,6 +153,7 @@ impl TitleTab {
             fillet_fill_l: BorderRenderElement::default(),
             fillet_l_loc: Point::from((0., 0.)),
             has_left_bend: false,
+            attached_left: true,
             row_gap: 0.,
             stub: BorderRenderElement::default(),
             stub_loc: Point::from((0., 0.)),
@@ -223,6 +229,11 @@ impl TitleTab {
             start,
             self.rect.loc.x + self.rect.size.w + self.fillet_radius,
         )
+    }
+
+    /// Whether the tab squares off the frame's top-left corner.
+    pub fn is_attached_left(&self) -> bool {
+        self.visible && self.attached_left
     }
 
     /// Tile-relative X where the next tab in a row should start.
@@ -370,13 +381,16 @@ impl TitleTab {
         // Bend and gap sizes are fixed per tab so a row lines up regardless of focus.
         let join_r = round(f64::from(frame.top_left_radius) * self.config.join_radius_factor);
         let line_w = round(frame.line_width);
-        self.row_gap = (join_r + line_w) * 2.;
+        self.row_gap = round(join_r + line_w);
 
-        let first_in_row = row.is_none_or(|row| row.index == 0);
-        self.has_left_bend = !first_in_row;
+        // In a row every tab is free-standing with a bend on both sides, and the frame keeps its
+        // rounded top-left corner; the row starts just past that corner.
+        self.attached_left = row.is_none();
+        self.has_left_bend = row.is_some();
         let x0 = match row {
-            Some(row) if !first_in_row => row.x,
-            _ => -outset,
+            Some(row) if row.index == 0 => round(frame.row_inset + join_r),
+            Some(row) => row.x,
+            None => -outset,
         };
 
         let min_w = f64::max(radius * 2., lead + trail);

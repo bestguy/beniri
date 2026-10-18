@@ -564,6 +564,9 @@ impl<W: LayoutElement> Tile<W> {
                     outset: ring_width,
                     top_left_radius: top_left_radius as f32,
                     line_width,
+                    row_inset: f64::from(window_radius.top_left)
+                        + border_width
+                        + self.focus_ring.width(),
                     frame_drawn: ring_drawn || border_width > 0.,
                     frame_rect,
                     view_rect,
@@ -862,7 +865,7 @@ impl<W: LayoutElement> Tile<W> {
     /// Window corner radius, with the top-left corner squared off when the title tab is attached.
     fn corner_radius(&self) -> CornerRadius {
         let mut radius = self.window.geometry_corner_radius();
-        if self.visual_tab_height().is_some() {
+        if self.visual_tab_height().is_some() && self.title_tab.is_attached_left() {
             radius.top_left = 0.;
         }
         radius
