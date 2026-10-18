@@ -11,17 +11,17 @@ use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderEleme
 
 #[derive(Debug)]
 pub struct FocusRing {
-    buffers: [SolidColorBuffer; 8],
-    locations: [Point<f64, Logical>; 8],
-    sizes: [Size<f64, Logical>; 8],
-    borders: [BorderRenderElement; 8],
+    buffers: [SolidColorBuffer; 9],
+    locations: [Point<f64, Logical>; 9],
+    sizes: [Size<f64, Logical>; 9],
+    borders: [BorderRenderElement; 9],
     full_size: Size<f64, Logical>,
     is_border: bool,
     use_border_shader: bool,
     config: niri_config::FocusRing,
     thicken_corners: bool,
-    /// X coordinate (window-relative) where the top edge starts, for the title tab outline.
-    top_edge_cut: Option<f64>,
+    /// Window-relative X range of a gap in the top edge, for the title tab outline.
+    top_edge_gap: Option<(f64, f64)>,
 }
 
 niri_render_elements! {
@@ -43,7 +43,7 @@ impl FocusRing {
             use_border_shader: false,
             config,
             thicken_corners: true,
-            top_edge_cut: None,
+            top_edge_gap: None,
         }
     }
 
@@ -142,15 +142,21 @@ impl FocusRing {
                 ),
             );
 
-            // Top edge.
+            // Top edge, possibly with a gap for the title tab. The part right of the gap is
+            // piece 0, the part left of it is piece 8.
             let top_start = -width + top_left;
             let top_end = win_size.w + width - top_right;
-            let top_start = match self.top_edge_cut {
-                Some(cut) => f64::max(top_start, f64::min(cut, top_end)),
-                None => top_start,
+            let (gap_start, gap_end) = match self.top_edge_gap {
+                Some((start, end)) => (
+                    f64::max(top_start, f64::min(start, top_end)),
+                    f64::max(top_start, f64::min(end, top_end)),
+                ),
+                None => (top_start, top_start),
             };
-            self.sizes[0] = Size::from((top_end - top_start, width));
-            self.locations[0] = Point::from((top_start, -width));
+            self.sizes[0] = Size::from((top_end - gap_end, width));
+            self.locations[0] = Point::from((gap_end, -width));
+            self.sizes[8] = Size::from((f64::max(0., gap_start - top_start), width));
+            self.locations[8] = Point::from((top_start, -width));
 
             // Bottom edge.
             self.sizes[1] =
@@ -207,6 +213,7 @@ impl FocusRing {
             self.sizes[0] = self.full_size;
             self.buffers[0].resize(self.sizes[0]);
             self.locations[0] = Point::from((-width, -width));
+            self.sizes[8] = Size::from((0., 0.));
 
             self.borders[0].update(
                 self.sizes[0],
@@ -255,7 +262,13 @@ impl FocusRing {
         };
 
         if self.is_border {
-            for ((buf, border), loc) in zip(zip(&self.buffers, &self.borders), self.locations) {
+            for (((buf, border), loc), size) in zip(
+                zip(zip(&self.buffers, &self.borders), self.locations),
+                self.sizes,
+            ) {
+                if size.w <= 0. || size.h <= 0. {
+                    continue;
+                }
                 push(buf, border, location + loc);
             }
         } else {
@@ -279,8 +292,8 @@ impl FocusRing {
         self.thicken_corners = value;
     }
 
-    pub fn set_top_edge_cut(&mut self, cut: Option<f64>) {
-        self.top_edge_cut = cut;
+    pub fn set_top_edge_gap(&mut self, gap: Option<(f64, f64)>) {
+        self.top_edge_gap = gap;
     }
 
     pub fn config(&self) -> &niri_config::FocusRing {

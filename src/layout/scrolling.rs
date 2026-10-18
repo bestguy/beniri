@@ -14,6 +14,7 @@ use super::closing_window::{ClosingWindow, ClosingWindowRenderElement};
 use super::monitor::InsertPosition;
 use super::tab_indicator::{TabIndicator, TabIndicatorRenderElement, TabInfo};
 use super::tile::{Tile, TileRenderElement, TileRenderSnapshot};
+use super::title_tab::TabRow;
 use super::workspace::{InteractiveResize, ResolvedSize};
 use super::{ConfigureIntent, HitType, InteractiveResizeData, LayoutElement, Options, RemovedTile};
 use crate::animation::{Animation, Clock};
@@ -2961,6 +2962,19 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                     push(elem.into())
                 });
             }
+
+            // Title tabs of the hidden tiles in a tabbed column, behind the visible tile.
+            if col.has_title_tab_row() {
+                for (tile, tile_off, visible) in col.tiles_in_render_order() {
+                    if visible || tile.alpha_animation.is_some() {
+                        continue;
+                    }
+                    let tile_pos =
+                        view_off + col_off + col_render_off + tile_off + tile.render_offset();
+                    let tile_pos = tile_pos.to_physical_precise_round(scale).to_logical(scale);
+                    tile.render_title_tab(ctx.renderer, tile_pos, &mut |elem| push(elem.into()));
+                }
+            }
         }
     }
 
@@ -2971,6 +2985,27 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         for (col, col_x) in self.columns_in_render_order() {
             let col_off = Point::from((col_x, 0.));
             let col_render_off = col.render_offset();
+
+            // Hit the title tabs of hidden tiles in a tabbed column.
+            if col.has_title_tab_row() {
+                for (tile, tile_off, visible) in col.tiles_in_render_order() {
+                    if visible {
+                        continue;
+                    }
+                    let tile_pos =
+                        view_off + col_off + col_render_off + tile_off + tile.render_offset();
+                    let tile_pos = tile_pos.to_physical_precise_round(scale).to_logical(scale);
+                    if let Some(hit) = tile.title_tab_hit(pos - tile_pos) {
+                        // Flagged like the tab indicator so focus-follows-mouse doesn't switch
+                        // tabs on hover; clicks and drags still go through the title tab hit.
+                        let hit = HitType::Activate {
+                            is_tab_indicator: true,
+                            title_tab: Some(hit),
+                        };
+                        return Some((tile.window(), hit));
+                    }
+                }
+            }
 
             // Hit the tab indicator.
             if col.display_mode == ColumnDisplay::Tabbed && col.sizing_mode().is_normal() {
@@ -4100,12 +4135,27 @@ impl<W: LayoutElement> Column<W> {
 
     pub fn update_render_elements(&mut self, is_active: bool, view_rect: Rectangle<f64, Logical>) {
         let active_idx = self.active_tile_idx;
+        let title_tab_row = self.has_title_tab_row();
+        let count = self.tiles.len();
+        let mut next_x = 0.;
         for (tile_idx, (tile, tile_off)) in self.tiles_mut().enumerate() {
             let is_active = is_active && tile_idx == active_idx;
+
+            if title_tab_row {
+                tile.set_title_tab_row(Some(TabRow {
+                    x: next_x,
+                    index: tile_idx,
+                    count,
+                }));
+            }
 
             let mut tile_view_rect = view_rect;
             tile_view_rect.loc -= tile_off + tile.render_offset();
             tile.update_render_elements(is_active, tile_view_rect);
+
+            if title_tab_row {
+                next_x = tile.title_tab().row_next_x();
+            }
         }
 
         let config = self.tab_indicator.config();
@@ -4123,7 +4173,9 @@ impl<W: LayoutElement> Column<W> {
         // you don't want that to happen in fullscreen. Also, laying things out correctly when the
         // tab indicator is within the column and the column goes fullscreen, would require too
         // many changes to the code for too little benefit (it's mostly invisible anyway).
-        let enabled = self.display_mode == ColumnDisplay::Tabbed && self.sizing_mode().is_normal();
+        let enabled = self.display_mode == ColumnDisplay::Tabbed
+            && self.sizing_mode().is_normal()
+            && !title_tab_row;
 
         self.tab_indicator.update_render_elements(
             enabled,
@@ -4380,9 +4432,16 @@ impl<W: LayoutElement> Column<W> {
         }
     }
 
+    /// Whether this column shows its tabs as a row of title tabs instead of the tab indicator.
+    fn has_title_tab_row(&self) -> bool {
+        self.display_mode == ColumnDisplay::Tabbed
+            && self.sizing_mode().is_normal()
+            && !self.options.layout.title_tab.off
+    }
+
     /// Extra size taken up by elements in the column such as the tab indicator.
     fn extra_size(&self) -> Size<f64, Logical> {
-        if self.display_mode == ColumnDisplay::Tabbed {
+        if self.display_mode == ColumnDisplay::Tabbed && !self.has_title_tab_row() {
             self.tab_indicator.extra_size(self.tiles.len(), self.scale)
         } else {
             Size::from((0., 0.))

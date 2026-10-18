@@ -11,10 +11,10 @@ use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
 use super::focus_ring::{FocusRing, FocusRingRenderElement};
 use super::opening_window::{OpenAnimation, OpeningWindowRenderElement};
 use super::shadow::Shadow;
-use super::title_tab::{FrameInfo, TitleTab, TitleTabRenderElement};
+use super::title_tab::{FrameInfo, TabRow, TitleTab, TitleTabRenderElement};
 use super::{
     HitType, LayoutElement, LayoutElementRenderElement, LayoutElementRenderSnapshot, Options,
-    SizeFrac, RESIZE_ANIMATION_THRESHOLD,
+    SizeFrac, TitleTabHit, RESIZE_ANIMATION_THRESHOLD,
 };
 use crate::animation::{Animation, Clock};
 use crate::layout::SizingMode;
@@ -50,6 +50,8 @@ pub struct Tile<W: LayoutElement> {
 
     /// BeOS-style title tab above the top-left corner.
     title_tab: TitleTab,
+    /// Placement in a row of tabs, set by the column right before update_render_elements().
+    title_tab_row: Option<TabRow>,
 
     /// The shadow around the window.
     shadow: Shadow,
@@ -200,6 +202,7 @@ impl<W: LayoutElement> Tile<W> {
             border: FocusRing::new(border_config.into()),
             focus_ring: FocusRing::new(focus_ring_config),
             title_tab: TitleTab::new(title_tab_config),
+            title_tab_row: None,
             shadow: Shadow::new(shadow_config),
             sizing_mode,
             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), [0., 0., 0., 1.]),
@@ -469,6 +472,8 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn update_render_elements(&mut self, is_active: bool, view_rect: Rectangle<f64, Logical>) {
+        // Consumed every update so a tile leaving a tabbed column drops its row placement.
+        let title_tab_row = self.title_tab_row.take();
         let rules = self.window.rules();
         let animated_tile_size = self.animated_tile_size();
         let expanded_progress = self.expanded_progress();
@@ -514,7 +519,11 @@ impl<W: LayoutElement> Tile<W> {
         {
             let is_urgent = self.window.is_urgent();
             let ring_drawn = is_active && !self.focus_ring.is_off();
-            let ring_width = if ring_drawn { self.focus_ring.width() } else { 0. };
+            let ring_width = if ring_drawn {
+                self.focus_ring.width()
+            } else {
+                0.
+            };
             let frame_rect = Rectangle::new(
                 Point::from((-ring_width, tab_height - ring_width)),
                 frame_size + Size::from((ring_width * 2., ring_width * 2.)),
@@ -560,19 +569,21 @@ impl<W: LayoutElement> Tile<W> {
                     view_rect,
                     gradient,
                 },
+                title_tab_row,
                 self.scale,
                 1. - expanded_progress as f32,
             );
         }
 
-        // In outline style, the frame's top edge starts where the tab's right edge is.
-        let top_edge_cut = self
+        // In outline style, the frame's top edge has a gap where the tab replaces it.
+        let top_edge_gap = self
             .title_tab
             .is_outline()
-            .then(|| self.title_tab.frame_top_edge_start());
-        self.focus_ring.set_top_edge_cut(top_edge_cut);
-        self.border
-            .set_top_edge_cut(top_edge_cut.map(|cut| cut - border_width));
+            .then(|| self.title_tab.frame_top_edge_gap());
+        self.focus_ring.set_top_edge_gap(top_edge_gap);
+        self.border.set_top_edge_gap(
+            top_edge_gap.map(|(start, end)| (start - border_width, end - border_width)),
+        );
 
         let radius = self
             .corner_radius()
@@ -859,6 +870,29 @@ impl<W: LayoutElement> Tile<W> {
 
     pub fn title_tab(&self) -> &TitleTab {
         &self.title_tab
+    }
+
+    pub fn set_title_tab_row(&mut self, row: Option<TabRow>) {
+        self.title_tab_row = row;
+    }
+
+    /// Hit-tests only the title tab, for tiles hidden in a tabbed column.
+    pub fn title_tab_hit(&self, point: Point<f64, Logical>) -> Option<TitleTabHit> {
+        self.title_tab.hit(point - self.bob_offset())
+    }
+
+    /// Renders only the title tab, for tiles hidden in a tabbed column.
+    pub fn render_title_tab<R: NiriRenderer>(
+        &self,
+        renderer: &mut R,
+        location: Point<f64, Logical>,
+        push: &mut dyn FnMut(TileRenderElement<R>),
+    ) {
+        if self.visual_tab_height().is_some() {
+            let location = location + self.bob_offset();
+            self.title_tab
+                .render(renderer, location, &mut |elem| push(elem.into()));
+        }
     }
 
     /// Returns the location of the window's visual geometry within this Tile.

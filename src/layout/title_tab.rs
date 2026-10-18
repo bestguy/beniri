@@ -28,6 +28,15 @@ use crate::utils::to_physical_precise_round;
 /// Largest texture dimension we'll ask the GPU for.
 const MAX_TEXTURE_SIZE: i32 = 16383;
 
+/// Placement of a tab within a row of tabs (tabbed columns).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TabRow {
+    /// Tile-relative X where this tab starts (ignored for the first tab, which is flush left).
+    pub x: f64,
+    pub index: usize,
+    pub count: usize,
+}
+
 #[derive(Debug)]
 pub struct TitleTab {
     config: niri_config::TitleTab,
@@ -45,6 +54,13 @@ pub struct TitleTab {
     fillet_fill: BorderRenderElement,
     fillet_loc: Point<f64, Logical>,
     fillet_radius: f64,
+    /// Same for the left edge, used when the tab is not the first in a row.
+    fillet_l: BorderRenderElement,
+    fillet_fill_l: BorderRenderElement,
+    fillet_l_loc: Point<f64, Logical>,
+    has_left_bend: bool,
+    /// Horizontal gap to the next tab in a row.
+    row_gap: f64,
     /// The outline element is cut short so its right edge stops where the bend begins; this stub
     /// continues the left edge down to the frame.
     stub: BorderRenderElement,
@@ -128,6 +144,11 @@ impl TitleTab {
             fillet_fill: BorderRenderElement::default(),
             fillet_loc: Point::from((0., 0.)),
             fillet_radius: 0.,
+            fillet_l: BorderRenderElement::default(),
+            fillet_fill_l: BorderRenderElement::default(),
+            fillet_l_loc: Point::from((0., 0.)),
+            has_left_bend: false,
+            row_gap: 0.,
             stub: BorderRenderElement::default(),
             stub_loc: Point::from((0., 0.)),
             outline_width: 0.,
@@ -168,6 +189,8 @@ impl TitleTab {
         self.outline.damage_all();
         self.fillet.damage_all();
         self.fillet_fill.damage_all();
+        self.fillet_l.damage_all();
+        self.fillet_fill_l.damage_all();
         self.stub.damage_all();
         self.close_button.damage_all();
         self.max_back.damage_all();
@@ -189,9 +212,22 @@ impl TitleTab {
         self.outline_width
     }
 
-    /// X coordinate (tile-relative) where the frame's top edge should start in outline style.
-    pub fn frame_top_edge_start(&self) -> f64 {
-        self.rect.loc.x + self.rect.size.w + self.fillet_radius
+    /// Tile-relative X range of the frame's top edge that the tab replaces in outline style.
+    pub fn frame_top_edge_gap(&self) -> (f64, f64) {
+        let start = if self.has_left_bend {
+            self.rect.loc.x - self.fillet_radius
+        } else {
+            f64::NEG_INFINITY
+        };
+        (
+            start,
+            self.rect.loc.x + self.rect.size.w + self.fillet_radius,
+        )
+    }
+
+    /// Tile-relative X where the next tab in a row should start.
+    pub fn row_next_x(&self) -> f64 {
+        self.rect.loc.x + self.rect.size.w + self.row_gap
     }
 
     pub fn is_off(&self) -> bool {
@@ -238,6 +274,7 @@ impl TitleTab {
         is_active: bool,
         is_urgent: bool,
         frame: FrameInfo,
+        row: Option<TabRow>,
         scale: f64,
         alpha: f32,
     ) {
@@ -330,13 +367,31 @@ impl TitleTab {
             padding
         };
 
+        // Bend and gap sizes are fixed per tab so a row lines up regardless of focus.
+        let join_r = round(f64::from(frame.top_left_radius) * self.config.join_radius_factor);
+        let line_w = round(frame.line_width);
+        self.row_gap = (join_r + line_w) * 2.;
+
+        let first_in_row = row.is_none_or(|row| row.index == 0);
+        self.has_left_bend = !first_in_row;
+        let x0 = match row {
+            Some(row) if !first_in_row => row.x,
+            _ => -outset,
+        };
+
         let min_w = f64::max(radius * 2., lead + trail);
-        let max_w = f64::max(min_w, round(tile_width * self.config.max_width_proportion) + outset);
+        let mut max_w = round(tile_width * self.config.max_width_proportion) + outset;
+        if let Some(row) = row {
+            let count = row.count.max(1) as f64;
+            let share = (tile_width - self.row_gap * (count - 1.)) / count;
+            max_w = f64::min(max_w, round(share));
+        }
+        let max_w = f64::max(min_w, max_w);
         let width = (natural_w + lead + trail + outset).clamp(min_w, max_w);
         let width = round(width);
 
         self.rect = Rectangle::new(
-            Point::from((-outset, -outset)),
+            Point::from((x0, -outset)),
             Size::from((width, height + outset)),
         );
 
@@ -451,10 +506,7 @@ impl TitleTab {
             self.fillet_radius = r;
             let rc = r + w;
 
-            let open_geometry = Rectangle::from_size(Size::from((
-                width,
-                height + outset + w * 2.,
-            )));
+            let open_geometry = Rectangle::from_size(Size::from((width, height + outset + w * 2.)));
             // The outline stops where the bend starts, so its right edge doesn't poke into it.
             let outline_size = Size::from((width, f64::max(w, self.rect.size.h - rc)));
             self.outline.update(
@@ -471,9 +523,13 @@ impl TitleTab {
                 alpha,
             );
 
-            // Left edge continues down to the frame.
+            // Left edge continues down to the frame (first tab only; others get a left bend).
             self.stub_loc = Point::from((self.rect.loc.x, self.rect.loc.y + outline_size.h));
-            let stub_size = Size::from((w, self.rect.size.h - outline_size.h));
+            let stub_size = if self.has_left_bend {
+                Size::from((w, 0.))
+            } else {
+                Size::from((w, self.rect.size.h - outline_size.h))
+            };
             self.stub.update(
                 stub_size,
                 Rectangle::new(gradient_area.loc - self.stub_loc, gradient_area.size),
@@ -549,6 +605,43 @@ impl TitleTab {
                 scale as f32,
                 alpha,
             );
+
+            // Mirrored bend on the left for tabs that are not first in a row. The arc center is
+            // the element's top-left corner, so the geometry's bottom-right corner is rounded.
+            self.fillet_l_loc =
+                Point::from((self.rect.loc.x - r, self.rect.loc.y + self.rect.size.h - rc));
+            let corner_r = |radius: f64| CornerRadius {
+                top_left: 0.,
+                top_right: 0.,
+                bottom_right: radius as f32,
+                bottom_left: 0.,
+            };
+            self.fillet_l.update(
+                fillet_size,
+                Rectangle::new(gradient_area.loc - self.fillet_l_loc, gradient_area.size),
+                gradient.in_,
+                gradient.from,
+                gradient.to,
+                ((gradient.angle as f32) - 90.).to_radians(),
+                Rectangle::new(Point::from((-rc, -rc)), Size::from((rc * 2., rc * 2.))),
+                w as f32,
+                corner_r(rc),
+                scale as f32,
+                alpha,
+            );
+            self.fillet_fill_l.update(
+                fillet_size,
+                Rectangle::from_size(fillet_size),
+                GradientInterpolation::default(),
+                fill,
+                fill,
+                0.,
+                Rectangle::new(Point::from((-rc2, -rc2)), Size::from((rc2 * 2., rc2 * 2.))),
+                (rc2 - rc) as f32,
+                corner_r(rc2),
+                scale as f32,
+                alpha,
+            );
         } else {
             self.background.update(
                 self.rect.size,
@@ -563,7 +656,8 @@ impl TitleTab {
                 scale as f32,
                 alpha,
             );
-            self.solid.update(self.rect.size, gradient.from.to_array_premul());
+            self.solid
+                .update(self.rect.size, gradient.from.to_array_premul());
         }
     }
 
@@ -627,12 +721,21 @@ impl TitleTab {
                         .with_location(location + self.rect.loc)
                         .into(),
                 );
-                push(
-                    self.stub
-                        .clone()
-                        .with_location(location + self.stub_loc)
-                        .into(),
-                );
+                if self.has_left_bend {
+                    push(
+                        self.fillet_l
+                            .clone()
+                            .with_location(location + self.fillet_l_loc)
+                            .into(),
+                    );
+                } else {
+                    push(
+                        self.stub
+                            .clone()
+                            .with_location(location + self.stub_loc)
+                            .into(),
+                    );
+                }
                 push(
                     self.fillet
                         .clone()
@@ -653,6 +756,14 @@ impl TitleTab {
                         .with_location(location + self.fillet_loc)
                         .into(),
                 );
+                if self.has_left_bend {
+                    push(
+                        self.fillet_fill_l
+                            .clone()
+                            .with_location(location + self.fillet_l_loc)
+                            .into(),
+                    );
+                }
             }
         } else {
             push(
