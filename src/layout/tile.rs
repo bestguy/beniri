@@ -564,9 +564,6 @@ impl<W: LayoutElement> Tile<W> {
                     outset: ring_width,
                     top_left_radius: top_left_radius as f32,
                     line_width,
-                    row_inset: f64::from(window_radius.top_left)
-                        + border_width
-                        + self.focus_ring.width(),
                     frame_drawn: ring_drawn || border_width > 0.,
                     frame_rect,
                     view_rect,
