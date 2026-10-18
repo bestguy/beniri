@@ -471,8 +471,9 @@ impl TitleTab {
             let line = f64::max(1. / scale, round(s / 8.));
             let back = round(s * 0.72);
             let front = round(s * 0.58);
-            self.max_back_loc = self.max_rect.loc + Point::from((s - back, 0.));
-            self.max_front_loc = self.max_rect.loc + Point::from((0., s - front));
+            // Big square at the bottom-right, small one in front at the top-left, as on BeOS.
+            self.max_back_loc = self.max_rect.loc + Point::from((s - back, s - back));
+            self.max_front_loc = self.max_rect.loc;
             let square = |elem: &mut BorderRenderElement, size: f64, color: Color, bw: f64| {
                 let size = Size::from((size, size));
                 elem.update(
