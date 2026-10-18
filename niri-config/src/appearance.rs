@@ -1350,3 +1350,151 @@ mod tests {
         );
     }
 }
+
+/// BeOS-style title tab drawn by the compositor above the top-left of each window.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TitleTab {
+    pub off: bool,
+    /// Height of the tab strip in logical pixels. The tile grows by this much on top.
+    pub height: f64,
+    /// Horizontal padding between the tab edge and the title text.
+    pub padding: f64,
+    /// Pango font description for the title text.
+    pub font: String,
+    /// Maximum tab width as a proportion of the tile width.
+    pub max_width_proportion: f64,
+    /// Top corner radius of the tab as a fraction of the frame's corner radius.
+    pub corner_radius_factor: f64,
+    /// Radius of the bend where the tab joins the frame, as a fraction of the frame's radius.
+    pub join_radius_factor: f64,
+    /// When set, the tab is drawn as an outline in the frame color with this fill inside.
+    /// A transparent fill shows the wallpaper through the tab.
+    pub fill_color: Option<Color>,
+    /// Whether to draw a close button before the title.
+    pub close_button: bool,
+    /// Side length of the close button square.
+    pub close_button_size: f64,
+    /// Whether to draw a maximize (zoom) button after the title.
+    pub maximize_button: bool,
+    /// Tab background colors. `None` falls back to the focus ring (or border) colors.
+    pub active_color: Option<Color>,
+    pub inactive_color: Option<Color>,
+    pub urgent_color: Option<Color>,
+    pub active_gradient: Option<Gradient>,
+    pub inactive_gradient: Option<Gradient>,
+    pub urgent_gradient: Option<Gradient>,
+    /// Title text colors. `None` picks black or white by background luminance.
+    pub active_text_color: Option<Color>,
+    pub inactive_text_color: Option<Color>,
+    pub urgent_text_color: Option<Color>,
+}
+
+impl Default for TitleTab {
+    fn default() -> Self {
+        Self {
+            off: true,
+            height: 24.,
+            padding: 10.,
+            font: String::from("sans 10"),
+            max_width_proportion: 0.6,
+            corner_radius_factor: 1.,
+            join_radius_factor: 0.5,
+            fill_color: None,
+            close_button: true,
+            close_button_size: 10.,
+            maximize_button: true,
+            active_color: None,
+            inactive_color: None,
+            urgent_color: None,
+            active_gradient: None,
+            inactive_gradient: None,
+            urgent_gradient: None,
+            active_text_color: None,
+            inactive_text_color: None,
+            urgent_text_color: None,
+        }
+    }
+}
+
+impl MergeWith<TitleTabPart> for TitleTab {
+    fn merge_with(&mut self, part: &TitleTabPart) {
+        self.off |= part.off;
+        if part.on {
+            self.off = false;
+        }
+
+        merge!(
+            (self, part),
+            height,
+            padding,
+            max_width_proportion,
+            corner_radius_factor,
+            join_radius_factor,
+            close_button,
+            close_button_size,
+            maximize_button,
+        );
+        merge_clone!((self, part), font);
+
+        merge_color_gradient_opt!(
+            (self, part),
+            (active_color, active_gradient),
+            (inactive_color, inactive_gradient),
+            (urgent_color, urgent_gradient),
+        );
+
+        merge_clone_opt!(
+            (self, part),
+            fill_color,
+            active_text_color,
+            inactive_text_color,
+            urgent_text_color,
+        );
+    }
+}
+
+#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+pub struct TitleTabPart {
+    #[knuffel(child)]
+    pub off: bool,
+    #[knuffel(child)]
+    pub on: bool,
+    #[knuffel(child, unwrap(argument))]
+    pub height: Option<FloatOrInt<0, 65535>>,
+    #[knuffel(child, unwrap(argument))]
+    pub padding: Option<FloatOrInt<0, 65535>>,
+    #[knuffel(child, unwrap(argument))]
+    pub font: Option<String>,
+    #[knuffel(child, unwrap(argument))]
+    pub max_width_proportion: Option<FloatOrInt<0, 1>>,
+    #[knuffel(child, unwrap(argument))]
+    pub corner_radius_factor: Option<FloatOrInt<0, 10>>,
+    #[knuffel(child, unwrap(argument))]
+    pub join_radius_factor: Option<FloatOrInt<0, 10>>,
+    #[knuffel(child)]
+    pub fill_color: Option<Color>,
+    #[knuffel(child)]
+    pub close_button: Option<Flag>,
+    #[knuffel(child, unwrap(argument))]
+    pub close_button_size: Option<FloatOrInt<0, 65535>>,
+    #[knuffel(child)]
+    pub maximize_button: Option<Flag>,
+    #[knuffel(child)]
+    pub active_color: Option<Color>,
+    #[knuffel(child)]
+    pub inactive_color: Option<Color>,
+    #[knuffel(child)]
+    pub urgent_color: Option<Color>,
+    #[knuffel(child)]
+    pub active_gradient: Option<Gradient>,
+    #[knuffel(child)]
+    pub inactive_gradient: Option<Gradient>,
+    #[knuffel(child)]
+    pub urgent_gradient: Option<Gradient>,
+    #[knuffel(child)]
+    pub active_text_color: Option<Color>,
+    #[knuffel(child)]
+    pub inactive_text_color: Option<Color>,
+    #[knuffel(child)]
+    pub urgent_text_color: Option<Color>,
+}

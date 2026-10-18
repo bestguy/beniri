@@ -2,7 +2,7 @@ use core::f64;
 use std::rc::Rc;
 
 use niri_config::utils::MergeWith as _;
-use niri_config::{Color, CornerRadius, GradientInterpolation};
+use niri_config::{Color, CornerRadius, Gradient, GradientInterpolation};
 use niri_ipc::WindowLayout;
 use smithay::backend::renderer::element::{Element, Kind};
 use smithay::backend::renderer::gles::GlesRenderer;
@@ -11,6 +11,7 @@ use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
 use super::focus_ring::{FocusRing, FocusRingRenderElement};
 use super::opening_window::{OpenAnimation, OpeningWindowRenderElement};
 use super::shadow::Shadow;
+use super::title_tab::{FrameInfo, TitleTab, TitleTabRenderElement};
 use super::{
     HitType, LayoutElement, LayoutElementRenderElement, LayoutElementRenderSnapshot, Options,
     SizeFrac, RESIZE_ANIMATION_THRESHOLD,
@@ -46,6 +47,9 @@ pub struct Tile<W: LayoutElement> {
 
     /// The focus ring around the window.
     focus_ring: FocusRing,
+
+    /// BeOS-style title tab above the top-left corner.
+    title_tab: TitleTab,
 
     /// The shadow around the window.
     shadow: Shadow,
@@ -124,6 +128,7 @@ niri_render_elements! {
     TileRenderElement<R> => {
         LayoutElement = LayoutElementRenderElement<R>,
         FocusRing = FocusRingRenderElement,
+        TitleTab = TitleTabRenderElement,
         SolidColor = SolidColorRenderElement,
         Opening = OpeningWindowRenderElement,
         Resize = ResizeRenderElement,
@@ -186,12 +191,15 @@ impl<W: LayoutElement> Tile<W> {
         let border_config = options.layout.border.merged_with(&rules.border);
         let focus_ring_config = options.layout.focus_ring.merged_with(&rules.focus_ring);
         let shadow_config = options.layout.shadow.merged_with(&rules.shadow);
+        let mut title_tab_config = options.layout.title_tab.clone();
+        title_tab_config.height = round_logical_in_physical(scale, title_tab_config.height);
         let sizing_mode = window.sizing_mode();
 
         Self {
             window,
             border: FocusRing::new(border_config.into()),
             focus_ring: FocusRing::new(focus_ring_config),
+            title_tab: TitleTab::new(title_tab_config),
             shadow: Shadow::new(shadow_config),
             sizing_mode,
             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), [0., 0., 0., 1.]),
@@ -258,6 +266,7 @@ impl<W: LayoutElement> Tile<W> {
     pub fn update_shaders(&mut self) {
         self.border.update_shaders();
         self.focus_ring.update_shaders();
+        self.title_tab.update_shaders();
         self.shadow.update_shaders();
     }
 
@@ -402,10 +411,13 @@ impl<W: LayoutElement> Tile<W> {
         let shadow_config = self.options.layout.shadow.merged_with(&rules.shadow);
         self.shadow.update_config(shadow_config);
 
+        let mut title_tab_config = self.options.layout.title_tab.clone();
+        title_tab_config.height = round_logical_in_physical(self.scale, title_tab_config.height);
+        self.title_tab.update_config(title_tab_config);
+
         let window_size = self.window_size();
         let radius = self
-            .window
-            .geometry_corner_radius()
+            .corner_radius()
             .fit_to(window_size.w as f32, window_size.h as f32);
         self.rounded_corner_damage.set_corner_radius(radius);
     }
@@ -485,9 +497,85 @@ impl<W: LayoutElement> Tile<W> {
         //
         // Later, when windows get the surface shape protocol with radii, this issue will happen
         // when that changes between animated commits.
+        // The title tab reserves a strip at the top of the tile; the frame goes around the rest.
+        let tab_height = self.visual_tab_height().unwrap_or(0.);
+        border_window_size.h -= tab_height;
+        let mut frame_size = animated_tile_size;
+        frame_size.h -= tab_height;
+        let frame_view_rect = Rectangle::new(
+            view_rect.loc - Point::from((0., tab_height)),
+            view_rect.size,
+        );
+
+        let window_radius = self.window.geometry_corner_radius();
+
+        // Title tab. It attaches to whichever frame is drawn: the focus ring (active tile), the
+        // border, or just the window edge.
+        {
+            let is_urgent = self.window.is_urgent();
+            let ring_drawn = is_active && !self.focus_ring.is_off();
+            let ring_width = if ring_drawn { self.focus_ring.width() } else { 0. };
+            let frame_rect = Rectangle::new(
+                Point::from((-ring_width, tab_height - ring_width)),
+                frame_size + Size::from((ring_width * 2., ring_width * 2.)),
+            );
+            let top_left_radius = f64::from(window_radius.top_left) + border_width + ring_width;
+            let line_width = if ring_drawn {
+                ring_width
+            } else if border_width > 0. {
+                border_width
+            } else {
+                self.focus_ring.width()
+            };
+
+            let focus_ring_config = self.focus_ring.config();
+            let border_config = self.border.config();
+            let config = if focus_ring_config.off {
+                border_config
+            } else {
+                focus_ring_config
+            };
+            let (color, gradient) = if is_urgent {
+                (config.urgent_color, config.urgent_gradient)
+            } else if is_active {
+                (config.active_color, config.active_gradient)
+            } else {
+                (config.inactive_color, config.inactive_gradient)
+            };
+            let gradient = gradient.unwrap_or_else(|| Gradient::from(color));
+
+            let title = self.window.title().unwrap_or_default();
+            self.title_tab.update_render_elements(
+                self.visual_tab_height().is_some(),
+                animated_tile_size.w,
+                &title,
+                is_active,
+                is_urgent,
+                FrameInfo {
+                    outset: ring_width,
+                    top_left_radius: top_left_radius as f32,
+                    line_width,
+                    frame_drawn: ring_drawn || border_width > 0.,
+                    frame_rect,
+                    view_rect,
+                    gradient,
+                },
+                self.scale,
+                1. - expanded_progress as f32,
+            );
+        }
+
+        // In outline style, the frame's top edge starts where the tab's right edge is.
+        let top_edge_cut = self
+            .title_tab
+            .is_outline()
+            .then(|| self.title_tab.frame_top_edge_start());
+        self.focus_ring.set_top_edge_cut(top_edge_cut);
+        self.border
+            .set_top_edge_cut(top_edge_cut.map(|cut| cut - border_width));
+
         let radius = self
-            .window
-            .geometry_corner_radius()
+            .corner_radius()
             .expanded_by(border_width as f32)
             .scaled_by(1. - expanded_progress as f32);
         self.border.update_render_elements(
@@ -496,8 +584,8 @@ impl<W: LayoutElement> Tile<W> {
             !draw_border_with_background,
             self.window.is_urgent(),
             Rectangle::new(
-                view_rect.loc - Point::from((border_width, border_width)),
-                view_rect.size,
+                frame_view_rect.loc - Point::from((border_width, border_width)),
+                frame_view_rect.size,
             ),
             radius,
             self.scale,
@@ -507,12 +595,11 @@ impl<W: LayoutElement> Tile<W> {
         let radius = if self.visual_border_width().is_some() {
             radius
         } else {
-            self.window
-                .geometry_corner_radius()
+            self.corner_radius()
                 .scaled_by(1. - expanded_progress as f32)
         };
         self.shadow.update_render_elements(
-            animated_tile_size,
+            frame_size,
             is_active,
             radius,
             self.scale,
@@ -526,11 +613,11 @@ impl<W: LayoutElement> Tile<W> {
         };
         let radius = radius.expanded_by(self.focus_ring.width() as f32);
         self.focus_ring.update_render_elements(
-            animated_tile_size,
+            frame_size,
             is_active,
             !draw_focus_ring_with_background,
             self.window.is_urgent(),
-            view_rect,
+            frame_view_rect,
             radius,
             self.scale,
             1. - expanded_progress as f32,
@@ -736,12 +823,55 @@ impl<W: LayoutElement> Tile<W> {
         Some(self.border.width())
     }
 
+    /// Returns `None` if the title tab is hidden and `Some(height)` if it takes up space.
+    pub fn effective_tab_height(&self) -> Option<f64> {
+        if !self.sizing_mode.is_normal() {
+            return None;
+        }
+
+        if self.title_tab.is_off() {
+            return None;
+        }
+
+        Some(self.title_tab.height())
+    }
+
+    fn visual_tab_height(&self) -> Option<f64> {
+        if self.title_tab.is_off() {
+            return None;
+        }
+
+        if self.expanded_progress() == 1. {
+            return None;
+        }
+
+        Some(self.title_tab.height())
+    }
+
+    /// Window corner radius, with the top-left corner squared off when the title tab is attached.
+    fn corner_radius(&self) -> CornerRadius {
+        let mut radius = self.window.geometry_corner_radius();
+        if self.visual_tab_height().is_some() {
+            radius.top_left = 0.;
+        }
+        radius
+    }
+
+    pub fn title_tab(&self) -> &TitleTab {
+        &self.title_tab
+    }
+
     /// Returns the location of the window's visual geometry within this Tile.
     pub fn window_loc(&self) -> Point<f64, Logical> {
         let mut loc = Point::from((0., 0.));
 
         let window_size = self.animated_window_size();
-        let target_size = self.animated_tile_size();
+        let mut target_size = self.animated_tile_size();
+
+        // The title tab strip sits above the window.
+        let tab_height = self.effective_tab_height().unwrap_or(0.);
+        loc.y += tab_height;
+        target_size.h -= tab_height;
 
         // Center the window within its tile.
         //
@@ -778,6 +908,10 @@ impl<W: LayoutElement> Tile<W> {
             size.h += width * 2.;
         }
 
+        if let Some(height) = self.effective_tab_height() {
+            size.h += height;
+        }
+
         size
     }
 
@@ -795,6 +929,10 @@ impl<W: LayoutElement> Tile<W> {
         if let Some(width) = self.effective_border_width() {
             size.w += width * 2.;
             size.h += width * 2.;
+        }
+
+        if let Some(height) = self.effective_tab_height() {
+            size.h += height;
         }
 
         size
@@ -888,9 +1026,15 @@ impl<W: LayoutElement> Tile<W> {
         if self.is_in_input_region(point) {
             let win_pos = self.buf_loc() + offset;
             Some(HitType::Input { win_pos })
+        } else if let Some(hit) = self.title_tab.hit(point) {
+            Some(HitType::Activate {
+                is_tab_indicator: false,
+                title_tab: Some(hit),
+            })
         } else if self.is_in_activation_region(point) {
             Some(HitType::Activate {
                 is_tab_indicator: false,
+                title_tab: None,
             })
         } else {
             None
@@ -908,6 +1052,10 @@ impl<W: LayoutElement> Tile<W> {
             let width = self.border.width();
             size.w = f64::max(1., size.w - width * 2.);
             size.h = f64::max(1., size.h - width * 2.);
+        }
+
+        if !self.title_tab.is_off() {
+            size.h = f64::max(1., size.h - self.title_tab.height());
         }
 
         // The size request has to be i32 unfortunately, due to Wayland. We floor here instead of
@@ -930,11 +1078,14 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn tile_height_for_window_height(&self, size: f64) -> f64 {
-        if self.border.is_off() {
-            size
-        } else {
-            size + self.border.width() * 2.
+        let mut size = size;
+        if !self.border.is_off() {
+            size += self.border.width() * 2.;
         }
+        if !self.title_tab.is_off() {
+            size += self.title_tab.height();
+        }
+        size
     }
 
     pub fn window_width_for_tile_width(&self, size: f64) -> f64 {
@@ -946,11 +1097,14 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn window_height_for_tile_height(&self, size: f64) -> f64 {
-        if self.border.is_off() {
-            size
-        } else {
-            size - self.border.width() * 2.
+        let mut size = size;
+        if !self.border.is_off() {
+            size -= self.border.width() * 2.;
         }
+        if !self.title_tab.is_off() {
+            size -= self.title_tab.height();
+        }
+        size
     }
 
     pub fn request_maximized(
@@ -990,6 +1144,10 @@ impl<W: LayoutElement> Tile<W> {
             size.h += width * 2.;
         }
 
+        if !self.title_tab.is_off() {
+            size.h += self.title_tab.height();
+        }
+
         size
     }
 
@@ -1006,6 +1164,10 @@ impl<W: LayoutElement> Tile<W> {
             if size.h > 0. {
                 size.h += width * 2.;
             }
+        }
+
+        if !self.title_tab.is_off() && size.h > 0. {
+            size.h += self.title_tab.height();
         }
 
         size
@@ -1070,8 +1232,7 @@ impl<W: LayoutElement> Tile<W> {
         // that submit a full-sized buffer before acking the fullscreen state (Firefox).
         let clip_to_geometry = fullscreen_progress < 1. && rules.clip_to_geometry == Some(true);
         let radius = self
-            .window
-            .geometry_corner_radius()
+            .corner_radius()
             .scaled_by(1. - expanded_progress as f32);
 
         // Popups go on top, whether it's resize or not.
@@ -1246,8 +1407,7 @@ impl<W: LayoutElement> Tile<W> {
             if fullscreen_progress < 1. && has_border_shader {
                 let border_width = self.visual_border_width().unwrap_or(0.);
                 let radius = self
-                    .window
-                    .geometry_corner_radius()
+                    .corner_radius()
                     .expanded_by(border_width as f32)
                     .scaled_by(1. - expanded_progress as f32);
 
@@ -1279,10 +1439,18 @@ impl<W: LayoutElement> Tile<W> {
             }
         }
 
+        let tab_height = self.visual_tab_height().unwrap_or(0.);
+        let frame_location = location + Point::from((0., tab_height));
+
+        if self.visual_tab_height().is_some() {
+            self.title_tab
+                .render(ctx.renderer, location, &mut |elem| push(elem.into()));
+        }
+
         if let Some(width) = self.visual_border_width() {
             self.border.render(
                 ctx.renderer,
-                location + Point::from((width, width)),
+                frame_location + Point::from((width, width)),
                 &mut |elem| push(elem.into()),
             );
         }
@@ -1293,12 +1461,12 @@ impl<W: LayoutElement> Tile<W> {
         // a bit weird).
         if focus_ring && expanded_progress < 1. {
             self.focus_ring
-                .render(ctx.renderer, location, &mut |elem| push(elem.into()));
+                .render(ctx.renderer, frame_location, &mut |elem| push(elem.into()));
         }
 
         if expanded_progress < 1. {
             self.shadow
-                .render(ctx.renderer, location, &mut |elem| push(elem.into()));
+                .render(ctx.renderer, frame_location, &mut |elem| push(elem.into()));
         }
 
         let surface_anim_scale = animated_window_size / window_size;

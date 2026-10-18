@@ -20,6 +20,8 @@ pub struct FocusRing {
     use_border_shader: bool,
     config: niri_config::FocusRing,
     thicken_corners: bool,
+    /// X coordinate (window-relative) where the top edge starts, for the title tab outline.
+    top_edge_cut: Option<f64>,
 }
 
 niri_render_elements! {
@@ -41,6 +43,7 @@ impl FocusRing {
             use_border_shader: false,
             config,
             thicken_corners: true,
+            top_edge_cut: None,
         }
     }
 
@@ -140,8 +143,14 @@ impl FocusRing {
             );
 
             // Top edge.
-            self.sizes[0] = Size::from((win_size.w + width * 2. - top_left - top_right, width));
-            self.locations[0] = Point::from((-width + top_left, -width));
+            let top_start = -width + top_left;
+            let top_end = win_size.w + width - top_right;
+            let top_start = match self.top_edge_cut {
+                Some(cut) => f64::max(top_start, f64::min(cut, top_end)),
+                None => top_start,
+            };
+            self.sizes[0] = Size::from((top_end - top_start, width));
+            self.locations[0] = Point::from((top_start, -width));
 
             // Bottom edge.
             self.sizes[1] =
@@ -268,6 +277,10 @@ impl FocusRing {
 
     pub fn set_thicken_corners(&mut self, value: bool) {
         self.thicken_corners = value;
+    }
+
+    pub fn set_top_edge_cut(&mut self, cut: Option<f64>) {
+        self.top_edge_cut = cut;
     }
 
     pub fn config(&self) -> &niri_config::FocusRing {

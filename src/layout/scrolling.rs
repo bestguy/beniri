@@ -2985,6 +2985,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                 ) {
                     let hit = HitType::Activate {
                         is_tab_indicator: true,
+                        title_tab: None,
                     };
                     return Some((col.tiles[idx].window(), hit));
                 }

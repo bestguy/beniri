@@ -2,7 +2,8 @@ use knuffel::errors::DecodeError;
 use niri_ipc::{ColumnDisplay, SizeChange};
 
 use crate::appearance::{
-    Border, FocusRing, InsertHint, Shadow, TabIndicator, DEFAULT_BACKGROUND_COLOR,
+    Border, FocusRing, InsertHint, Shadow, TabIndicator, TitleTab, TitleTabPart,
+    DEFAULT_BACKGROUND_COLOR,
 };
 use crate::utils::{expect_only_children, Flag, MergeWith};
 use crate::{BorderRule, Color, FloatOrInt, InsertHintPart, ShadowRule, TabIndicatorPart};
@@ -13,6 +14,7 @@ pub struct Layout {
     pub border: Border,
     pub shadow: Shadow,
     pub tab_indicator: TabIndicator,
+    pub title_tab: TitleTab,
     pub insert_hint: InsertHint,
     pub preset_column_widths: Vec<PresetSize>,
     pub default_column_width: Option<PresetSize>,
@@ -33,6 +35,7 @@ impl Default for Layout {
             border: Border::default(),
             shadow: Shadow::default(),
             tab_indicator: TabIndicator::default(),
+            title_tab: TitleTab::default(),
             insert_hint: InsertHint::default(),
             preset_column_widths: vec![
                 PresetSize::Proportion(1. / 3.),
@@ -64,6 +67,7 @@ impl MergeWith<LayoutPart> for Layout {
             border,
             shadow,
             tab_indicator,
+            title_tab,
             insert_hint,
             always_center_single_column,
             empty_workspace_above_first,
@@ -104,6 +108,8 @@ pub struct LayoutPart {
     pub shadow: Option<ShadowRule>,
     #[knuffel(child)]
     pub tab_indicator: Option<TabIndicatorPart>,
+    #[knuffel(child)]
+    pub title_tab: Option<TitleTabPart>,
     #[knuffel(child)]
     pub insert_hint: Option<InsertHintPart>,
     #[knuffel(child, unwrap(children))]

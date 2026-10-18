@@ -85,6 +85,7 @@ pub mod scrolling;
 pub mod shadow;
 pub mod tab_indicator;
 pub mod tile;
+pub mod title_tab;
 pub mod workspace;
 
 #[cfg(test)]
@@ -245,6 +246,11 @@ pub trait LayoutElement {
     fn is_ignoring_opacity_window_rule(&self) -> bool;
 
     fn is_urgent(&self) -> bool;
+
+    /// Title of the element, shown in the title tab.
+    fn title(&self) -> Option<String> {
+        None
+    }
 
     fn configure_intent(&self) -> ConfigureIntent;
     fn send_pending_configure(&mut self);
@@ -539,7 +545,20 @@ pub enum HitType {
     Activate {
         /// Whether the hit was on the tab indicator.
         is_tab_indicator: bool,
+        /// Where on the window's title tab the hit was, if on the tab at all.
+        title_tab: Option<TitleTabHit>,
     },
+}
+
+/// Part of the title tab that was hit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TitleTabHit {
+    /// The tab body: click to focus, drag to move.
+    Body,
+    /// The close button.
+    Close,
+    /// The maximize button.
+    Maximize,
 }
 
 #[derive(Debug)]
@@ -640,6 +659,7 @@ impl HitType {
         match self {
             HitType::Input { .. } => HitType::Activate {
                 is_tab_indicator: false,
+                title_tab: None,
             },
             HitType::Activate { .. } => self,
         }

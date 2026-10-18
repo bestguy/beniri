@@ -6203,7 +6203,8 @@ impl Niri {
                 if matches!(
                     hit,
                     HitType::Activate {
-                        is_tab_indicator: true
+                        is_tab_indicator: true,
+                        ..
                     }
                 ) {
                     return;

@@ -48,7 +48,7 @@ use self::spatial_movement_grab::SpatialMovementGrab;
 #[cfg(feature = "dbus")]
 use crate::dbus::freedesktop_a11y::KbMonBlock;
 use crate::layout::scrolling::ScrollDirection;
-use crate::layout::{ActivateWindow, LayoutElement as _};
+use crate::layout::{ActivateWindow, HitType, LayoutElement as _, TitleTabHit};
 use crate::niri::{CastTarget, PointerVisibility, State};
 use crate::ui::mru::{WindowMru, WindowMruUi};
 use crate::ui::screenshot_ui::ScreenshotUi;
@@ -2879,9 +2879,40 @@ impl State {
                 // Check if we need to start an interactive move.
                 if button == Some(MouseButton::Left) && !pointer.is_grabbed() {
                     let mod_down = modifiers_from_state(mods).contains(mod_key.to_modifiers());
-                    if is_overview_open || mod_down {
-                        let location = pointer.current_location();
+                    let location = pointer.current_location();
 
+                    // Clicking the title tab focuses the window, and dragging it moves the
+                    // window, like a client-side titlebar would.
+                    let tab_hit = match self.niri.contents_under(location).window {
+                        Some((
+                            _,
+                            HitType::Activate {
+                                title_tab: Some(hit),
+                                ..
+                            },
+                        )) if !is_overview_open => Some(hit),
+                        _ => None,
+                    };
+                    let on_title_tab = tab_hit.is_some();
+
+                    match tab_hit {
+                        Some(TitleTabHit::Close) => {
+                            mapped.toplevel().send_close();
+                            // FIXME: granular.
+                            self.niri.queue_redraw_all();
+                            return;
+                        }
+                        Some(TitleTabHit::Maximize) => {
+                            self.niri.layout.activate_window(&window);
+                            self.niri.layout.toggle_full_width();
+                            // FIXME: granular.
+                            self.niri.queue_redraw_all();
+                            return;
+                        }
+                        _ => (),
+                    }
+
+                    if is_overview_open || mod_down || on_title_tab {
                         if !is_overview_open {
                             self.niri.layout.activate_window(&window);
                         }
@@ -2892,9 +2923,14 @@ impl State {
                             location,
                         };
                         let start_data = PointerOrTouchStartData::Pointer(start_data);
-                        let icon = CursorIcon::Grabbing;
+                        // Title tab drags keep the default cursor, like titlebar drags do.
+                        let icon = if on_title_tab && !mod_down {
+                            None
+                        } else {
+                            Some(CursorIcon::Grabbing)
+                        };
                         if let Some(grab) =
-                            MoveGrab::new(self, start_data, window.clone(), false, Some(icon))
+                            MoveGrab::new(self, start_data, window.clone(), false, icon)
                         {
                             pointer.set_grab(self, grab, serial, Focus::Clear);
 
@@ -2903,10 +2939,12 @@ impl State {
                             //
                             // In the overview, we click to activate window and close the overview,
                             // in this case setting the cursor right away would be distracting.
-                            if !is_overview_open {
-                                self.niri
-                                    .cursor_manager
-                                    .set_cursor_image(CursorImageStatus::Named(icon));
+                            if let Some(icon) = icon {
+                                if !is_overview_open {
+                                    self.niri
+                                        .cursor_manager
+                                        .set_cursor_image(CursorImageStatus::Named(icon));
+                                }
                             }
                         }
                     }
