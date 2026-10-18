@@ -1367,6 +1367,8 @@ pub struct TitleTab {
     pub corner_radius_factor: f64,
     /// Radius of the bend where the tab joins the frame, as a fraction of the frame's radius.
     pub join_radius_factor: f64,
+    /// Gap between tabs in a tabbed column. Defaults to the bend radius.
+    pub row_gap: Option<f64>,
     /// When set, the tab is drawn as an outline in the frame color with this fill inside.
     /// A transparent fill shows the wallpaper through the tab.
     pub fill_color: Option<Color>,
@@ -1399,6 +1401,7 @@ impl Default for TitleTab {
             max_width_proportion: 0.6,
             corner_radius_factor: 1.,
             join_radius_factor: 0.5,
+            row_gap: None,
             fill_color: None,
             close_button: true,
             close_button_size: 10.,
@@ -1443,6 +1446,10 @@ impl MergeWith<TitleTabPart> for TitleTab {
             (urgent_color, urgent_gradient),
         );
 
+        if let Some(x) = part.row_gap {
+            self.row_gap = Some(x.0);
+        }
+
         merge_clone_opt!(
             (self, part),
             fill_color,
@@ -1471,6 +1478,8 @@ pub struct TitleTabPart {
     pub corner_radius_factor: Option<FloatOrInt<0, 10>>,
     #[knuffel(child, unwrap(argument))]
     pub join_radius_factor: Option<FloatOrInt<0, 10>>,
+    #[knuffel(child, unwrap(argument))]
+    pub row_gap: Option<FloatOrInt<0, 65535>>,
     #[knuffel(child)]
     pub fill_color: Option<Color>,
     #[knuffel(child)]

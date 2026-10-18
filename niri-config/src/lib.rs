@@ -1390,6 +1390,7 @@ mod tests {
                     max_width_proportion: 0.6,
                     corner_radius_factor: 1.0,
                     join_radius_factor: 0.5,
+                    row_gap: None,
                     fill_color: None,
                     close_button: true,
                     close_button_size: 10.0,

@@ -35,6 +35,8 @@ pub struct TabRow {
     pub x: f64,
     pub index: usize,
     pub count: usize,
+    /// Whether this tab's tile is the one shown in the column.
+    pub active_in_column: bool,
 }
 
 #[derive(Debug)]
@@ -381,16 +383,18 @@ impl TitleTab {
         // Bend and gap sizes are fixed per tab so a row lines up regardless of focus.
         let join_r = round(f64::from(frame.top_left_radius) * self.config.join_radius_factor);
         let line_w = round(frame.line_width);
-        self.row_gap = round(join_r + line_w);
+        self.row_gap = round(self.config.row_gap.unwrap_or(join_r));
 
-        // In a row every tab is free-standing with a bend on both sides, and the frame keeps its
-        // rounded top-left corner; the row starts just past that corner.
-        self.attached_left = row.is_none();
-        self.has_left_bend = row.is_some();
+        // The first tab in a row sits flush on the frame's top-left corner like a lone tab does;
+        // the others are free-standing with a bend on both sides. When a later tab is the one
+        // shown, the frame corner stays rounded and the first tab's bottom-left follows it.
+        let first_in_row = row.is_none_or(|row| row.index == 0);
+        self.attached_left = first_in_row;
+        self.has_left_bend = !first_in_row;
+        let over_rounded_corner = row.is_some_and(|row| row.index == 0 && !row.active_in_column);
         let x0 = match row {
-            Some(row) if row.index == 0 => round(frame.row_inset + join_r),
-            Some(row) => row.x,
-            None => -outset,
+            Some(row) if !first_in_row => row.x,
+            _ => -outset,
         };
 
         let min_w = f64::max(radius * 2., lead + trail);
@@ -490,11 +494,16 @@ impl TitleTab {
         }
 
         // Background. Only the top corners are rounded: the bottom merges into the frame.
+        let bottom_left = if over_rounded_corner {
+            f64::max(0., frame.row_inset - line_w)
+        } else {
+            0.
+        };
         let corner_radius = CornerRadius {
             top_left: radius as f32,
             top_right: radius as f32,
             bottom_right: 0.,
-            bottom_left: 0.,
+            bottom_left: bottom_left as f32,
         }
         .fit_to(width as f32, (height + outset) as f32);
         self.use_shader = corner_radius != CornerRadius::default() || gradient.from != gradient.to;
@@ -520,7 +529,11 @@ impl TitleTab {
             self.fillet_radius = r;
             let rc = r + w;
 
-            let open_geometry = Rectangle::from_size(Size::from((width, height + outset + w * 2.)));
+            let open_geometry = if over_rounded_corner {
+                Rectangle::from_size(self.rect.size)
+            } else {
+                Rectangle::from_size(Size::from((width, height + outset + w * 2.)))
+            };
             // The outline stops where the bend starts, so its right edge doesn't poke into it.
             let outline_size = Size::from((width, f64::max(w, self.rect.size.h - rc)));
             self.outline.update(

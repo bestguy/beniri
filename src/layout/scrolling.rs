@@ -4146,6 +4146,7 @@ impl<W: LayoutElement> Column<W> {
                     x: next_x,
                     index: tile_idx,
                     count,
+                    active_in_column: tile_idx == active_idx,
                 }));
             }
 
