@@ -263,6 +263,10 @@ impl<W: LayoutElement> Tile<W> {
         let shadow_config = self.options.layout.shadow.merged_with(&rules.shadow);
         self.shadow.update_config(shadow_config);
 
+        let mut title_tab_config = self.options.layout.title_tab.clone();
+        title_tab_config.height = round_logical_in_physical(self.scale, title_tab_config.height);
+        self.title_tab.update_config(title_tab_config);
+
         self.window.update_config(self.options.blur);
     }
 

@@ -1384,6 +1384,7 @@ mod tests {
                 },
                 title_tab: TitleTab {
                     off: true,
+                    style: Filled,
                     height: 24.0,
                     padding: 10.0,
                     font: "sans 10",

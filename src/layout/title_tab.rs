@@ -8,7 +8,9 @@ use std::cell::RefCell;
 use std::cmp::min;
 
 use anyhow::ensure;
-use niri_config::{Color, CornerRadius, Gradient, GradientInterpolation, GradientRelativeTo};
+use niri_config::{
+    Color, CornerRadius, Gradient, GradientInterpolation, GradientRelativeTo, TitleTabStyle,
+};
 use pango::FontDescription;
 use pangocairo::cairo::{self, ImageSurface};
 use smithay::backend::allocator::Fourcc;
@@ -320,7 +322,14 @@ impl TitleTab {
         } else {
             self.config.inactive_text_color
         };
-        let fill = self.config.fill_color;
+        let fill = match self.config.style {
+            TitleTabStyle::Outline => Some(
+                self.config
+                    .fill_color
+                    .unwrap_or_else(|| Color::from_rgba8_unpremul(24, 24, 24, 255)),
+            ),
+            TitleTabStyle::Filled => None,
+        };
         self.has_fill = fill.is_some();
         // Like the focus ring, the outline only appears on tiles that have a frame.
         self.draw_outline = fill.is_some() && frame.frame_drawn;

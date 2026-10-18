@@ -1351,10 +1351,21 @@ mod tests {
     }
 }
 
+/// How the title tab is drawn.
+#[derive(knuffel::DecodeScalar, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TitleTabStyle {
+    /// Solid tab in the frame color with contrasting text.
+    #[default]
+    Filled,
+    /// Frame-colored outline around a `fill-color` interior, joined to the frame.
+    Outline,
+}
+
 /// BeOS-style title tab drawn by the compositor above the top-left of each window.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TitleTab {
     pub off: bool,
+    pub style: TitleTabStyle,
     /// Height of the tab strip in logical pixels. The tile grows by this much on top.
     pub height: f64,
     /// Horizontal padding between the tab edge and the title text.
@@ -1369,8 +1380,8 @@ pub struct TitleTab {
     pub join_radius_factor: f64,
     /// Gap between tabs in a tabbed column. Defaults to the bend radius.
     pub row_gap: Option<f64>,
-    /// When set, the tab is drawn as an outline in the frame color with this fill inside.
-    /// A transparent fill shows the wallpaper through the tab.
+    /// Interior color for the outline style. A transparent fill shows the wallpaper through the
+    /// tab. Defaults to a dark gray.
     pub fill_color: Option<Color>,
     /// Whether to draw a close button before the title.
     pub close_button: bool,
@@ -1395,6 +1406,7 @@ impl Default for TitleTab {
     fn default() -> Self {
         Self {
             off: true,
+            style: TitleTabStyle::Filled,
             height: 24.,
             padding: 10.,
             font: String::from("sans 10"),
@@ -1437,7 +1449,7 @@ impl MergeWith<TitleTabPart> for TitleTab {
             close_button_size,
             maximize_button,
         );
-        merge_clone!((self, part), font);
+        merge_clone!((self, part), font, style);
 
         merge_color_gradient_opt!(
             (self, part),
@@ -1472,6 +1484,8 @@ pub struct TitleTabPart {
     pub padding: Option<FloatOrInt<0, 65535>>,
     #[knuffel(child, unwrap(argument))]
     pub font: Option<String>,
+    #[knuffel(child, unwrap(argument))]
+    pub style: Option<TitleTabStyle>,
     #[knuffel(child, unwrap(argument))]
     pub max_width_proportion: Option<FloatOrInt<0, 1>>,
     #[knuffel(child, unwrap(argument))]
