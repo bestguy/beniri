@@ -1,3 +1,25 @@
+> **This is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.**
+>
+> Everything else is unmodified upstream niri: the same config, the same IPC, the same version numbers, the same `niri` binary name. The fork is rebased onto each upstream release and tagged `vXX.YY-beos.N`.
+>
+> Niri deliberately draws no window decorations, and a title tab is one, so this lives here rather than as an upstream pull request. We're grateful to the niri authors for the compositor this is built on. **Please report anything unrelated to the title tab upstream**, and title-tab issues here.
+>
+> The tab is **on by default**. To get stock niri rendering, add this to your config:
+>
+> ```kdl
+> layout {
+>     title-tab {
+>         off
+>     }
+> }
+> ```
+>
+> The only other changed default is the accent: the focus ring's active color is BeOS yellow (`#ffcb00`) instead of niri's light blue, so the tab, which takes its color from the focus ring, looks right out of the box. Your own `active-color` or theming tool overrides it as usual.
+>
+> What the tab does: shows the window title, click to focus, drag to move, a close button before the title and a maximize (zoom) button after it. Tabbed columns show a row of tabs instead of niri's side indicator. The tab comes filled in the frame color, or as an outline joined to the focus ring (`style "outline"`). See [Configuration: Title Tab](docs/wiki/Configuration:-Title-Tab.md) for every option, and [deploy/install.md](deploy/install.md) for running the fork alongside stock niri.
+>
+> <!-- TODO: two screenshots at 2x: single window focused/unfocused, and a tabbed column. -->
+
 <h1 align="center"><img alt="niri" src="https://github.com/user-attachments/assets/07d05cd0-d5dc-4a28-9a35-51bae8f119a0"></h1>
 <p align="center">A scrollable-tiling Wayland compositor.</p>
 <p align="center">
