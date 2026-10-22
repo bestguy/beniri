@@ -245,7 +245,9 @@ impl Default for FocusRing {
         Self {
             off: false,
             width: 4.,
-            active_color: Color::from_rgba8_unpremul(127, 200, 255, 255),
+            // Fork: BeOS yellow instead of niri's #7fc8ff, so the title tab, which takes
+            // its color from the focus ring, looks right out of the box.
+            active_color: Color::from_rgba8_unpremul(255, 203, 0, 255),
             inactive_color: Color::from_rgba8_unpremul(80, 80, 80, 255),
             urgent_color: Color::from_rgba8_unpremul(155, 0, 0, 255),
             active_gradient: None,

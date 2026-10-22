@@ -499,7 +499,11 @@ impl Config {
             .and_then(OsStr::to_str)
             .unwrap_or("config.kdl");
 
-        let config = Rc::new(RefCell::new(Config::default()));
+        // Fork: a config file that doesn't mention `title-tab` gets the tab turned on,
+        // while `Config::default()` keeps it off so upstream's tests see stock geometry.
+        let mut default = Config::default();
+        default.layout.title_tab.off = false;
+        let config = Rc::new(RefCell::new(default));
         let includes = Rc::new(RefCell::new(Includes(Vec::new())));
         let include_errors = Rc::new(RefCell::new(IncludeErrors(Vec::new())));
         let include_stack = HashSet::from([path.to_path_buf()]);
@@ -1383,7 +1387,7 @@ mod tests {
                     urgent_gradient: None,
                 },
                 title_tab: TitleTab {
-                    off: true,
+                    off: false,
                     style: Filled,
                     height: 24.0,
                     padding: 10.0,

@@ -28,7 +28,11 @@ impl Fixture {
         Self::with_config(Config::default())
     }
 
-    pub fn with_config(config: Config) -> Self {
+    pub fn with_config(mut config: Config) -> Self {
+        // Fork: keep upstream's integration tests at stock geometry; the title tab is
+        // on by default in parsed configs, so tab tests opt in explicitly.
+        config.layout.title_tab.off = true;
+
         let event_loop = EventLoop::try_new().unwrap();
         let handle = event_loop.handle();
 
