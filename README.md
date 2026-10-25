@@ -1,24 +1,55 @@
-> **BeNiri is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.**
->
-> Everything else is unmodified upstream niri: the same config, the same IPC, the same version numbers, the same `niri` binary name. The fork is rebased onto each upstream release and tagged `vXX.YY-beniri.N`.
->
-> Niri deliberately draws no window decorations, and a title tab is one, so this lives here rather than as an upstream pull request. We're grateful to the niri authors for the compositor this is built on. **Please report anything unrelated to the title tab upstream**, and title-tab issues here.
->
-> The tab is **on by default**. To get stock niri rendering, add this to your config:
->
-> ```kdl
-> layout {
->     title-tab {
->         off
->     }
-> }
-> ```
->
-> The only other changed default is the accent: the focus ring's active color is BeOS yellow (`#ffcb00`) instead of niri's light blue, so the tab, which takes its color from the focus ring, looks right out of the box. Your own `active-color` or theming tool overrides it as usual.
->
-> What the tab does: shows the window title, click to focus, drag to move, a close button before the title and a maximize (zoom) button after it. Tabbed columns show a row of tabs instead of niri's side indicator. The tab comes filled in the frame color, or as an outline joined to the focus ring (`style "outline"`). See [Configuration: Title Tab](docs/wiki/Configuration:-Title-Tab.md) for every option, and [deploy/install.md](deploy/install.md) for running the fork alongside stock niri.
->
-> <!-- TODO: two screenshots at 2x: single window focused/unfocused, and a tabbed column. -->
+# BeNiri
+
+**This is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.**
+
+### What the tab does:
+
+It shows the window title, click to focus, drag to move, a close button before the title and a maximize (zoom) button after it.
+
+`TODO: screenshot`
+
+It also changes tabbed columns to show a row of tabs instead of niri's side indicator.
+
+`TODO: screenshot`
+
+### Why?
+
+I **loved** the look of BeOS back in the day.
+
+I respect that Niri deliberately draws no window decorations, but I personally think this looks cool and find it fun and handy enough that I daily-drive this.
+
+So, this lives here as a fork rather than as an upstream pull request. I'm grateful to the niri authors for the compositor! **Please report anything unrelated to the title tab upstream**, and title-tab issues here.
+
+## Using
+
+Everything else is unmodified upstream niri: the same config, the same IPC, the same version numbers, the same `niri` binary name. The fork is rebased onto each upstream release and tagged `vXX.YY-beos.N`.
+
+The tab is **on by default**. To get stock niri rendering, add this to your config:
+
+```kdl
+layout {
+    title-tab {
+        off
+    }
+}
+```
+
+The only other changed default is the accent: the focus ring's active color is BeOS yellow (`#ffcb00`) instead of niri's light blue, so the tab, which takes its color from the focus ring, looks right out of the box. Your own `active-color` or theming tool overrides it as usual.
+
+The tab comes filled in the frame color, or can be configured as an outline joined to the focus ring (`style "outline"`).
+
+`TODO: screenshot`
+
+See [Configuration: Title Tab](docs/wiki/Configuration:-Title-Tab.md) for every option, and [deploy/install.md](deploy/install.md) for running the fork alongside stock niri.
+
+### FYIs
+
+- I used AI coding tools to help with this, in case you feel strongly about that.
+- I've only tested this with Fedora Asahi Linux.
+
+_Original Niri readme continues below_
+
+---
 
 <h1 align="center"><img alt="niri" src="https://github.com/user-attachments/assets/07d05cd0-d5dc-4a28-9a35-51bae8f119a0"></h1>
 <p align="center">A scrollable-tiling Wayland compositor.</p>
@@ -55,8 +86,8 @@ When a monitor disconnects, its workspaces will move to another monitor, but upo
 - An [Overview](https://github.com/user-attachments/assets/379a5d1f-acdb-4c11-b36c-e85fd91f0995) that zooms out workspaces and windows
 - Built-in screenshot UI
 - Monitor and window screencasting through xdg-desktop-portal-gnome
-    - You can [block out](https://niri-wm.github.io/niri/Configuration%3A-Window-Rules.html#block-out-from) sensitive windows from screencasts
-    - [Dynamic cast target](https://niri-wm.github.io/niri/Screencasting.html#dynamic-screencast-target) that can change what it shows on the go
+  - You can [block out](https://niri-wm.github.io/niri/Configuration%3A-Window-Rules.html#block-out-from) sensitive windows from screencasts
+  - [Dynamic cast target](https://niri-wm.github.io/niri/Screencasting.html#dynamic-screencast-target) that can change what it shows on the go
 - [Touchpad](https://github.com/niri-wm/niri/assets/1794388/946a910e-9bec-4cd1-a923-4a9421707515) and [mouse](https://github.com/niri-wm/niri/assets/1794388/8464e65d-4bf2-44fa-8c8e-5883355bd000) gestures
 - Group windows into [tabs](https://niri-wm.github.io/niri/Tabs.html)
 - Configurable layout: gaps, borders, struts, window sizes
@@ -89,27 +120,27 @@ Here are some points you may have questions about:
 - **NVIDIA**: seems to work fine.
 - **Floating windows**: yes, starting from niri 25.01.
 - **Input devices**: niri supports tablets, touchpads, and touchscreens.
-You can map the tablet to a specific monitor, or use [OpenTabletDriver].
-We have touchpad gestures, but no touchscreen gestures yet.
+  You can map the tablet to a specific monitor, or use [OpenTabletDriver].
+  We have touchpad gestures, but no touchscreen gestures yet.
 - **Wlr protocols**: yes, we have most of the important ones like layer-shell, gamma-control, screencopy.
-You can check on [wayland.app](https://wayland.app) at the bottom of each protocol's page.
+  You can check on [wayland.app](https://wayland.app) at the bottom of each protocol's page.
 - **Performance**: while I run niri on beefy machines, I try to stay conscious of performance.
-I've seen someone use it fine on an Eee PC 900 from 2008, of all things.
+  I've seen someone use it fine on an Eee PC 900 from 2008, of all things.
 - **Xwayland**: [integrated](https://niri-wm.github.io/niri/Xwayland.html#using-xwayland-satellite) via xwayland-satellite starting from niri 25.08.
 
 ## Media
 
-[niri: Making a Wayland compositor in Rust](https://youtu.be/Kmz8ODolnDg?list=PLRdS-n5seLRqrmWDQY4KDqtRMfIwU0U3T) · *December 2024*
+[niri: Making a Wayland compositor in Rust](https://youtu.be/Kmz8ODolnDg?list=PLRdS-n5seLRqrmWDQY4KDqtRMfIwU0U3T) · _December 2024_
 
 My talk from the 2024 Moscow RustCon about niri, and how I do randomized property testing and profiling, and measure input latency.
 The talk is in Russian, but I prepared full English subtitles that you can find in YouTube's subtitle language selector.
 
-[An interview with Ivan, the developer behind Niri](https://www.trommelspeicher.de/podcast/special_the_developer_behind_niri) · *June 2025*
+[An interview with Ivan, the developer behind Niri](https://www.trommelspeicher.de/podcast/special_the_developer_behind_niri) · _June 2025_
 
 An interview by a German tech podcast Das Triumvirat (in English).
 We talk about niri development and history, and my experience building and maintaining niri.
 
-[A tour of the niri scrolling-tiling Wayland compositor](https://lwn.net/Articles/1025866/) · *July 2025*
+[A tour of the niri scrolling-tiling Wayland compositor](https://lwn.net/Articles/1025866/) · _July 2025_
 
 An LWN article with a nice overview and introduction to niri.
 
