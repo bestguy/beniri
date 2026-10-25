@@ -66,6 +66,8 @@ pub struct TitleTab {
     corner: BorderRenderElement,
     corner_loc: Point<f64, Logical>,
     has_corner: bool,
+    /// Filled style: whether the tab's right edge bends into the frame (reuses `fillet_fill`).
+    has_filled_join: bool,
     has_left_bend: bool,
     /// Whether the tab sits on the frame's top-left corner (squaring it off).
     attached_left: bool,
@@ -165,6 +167,7 @@ impl TitleTab {
             corner: BorderRenderElement::default(),
             corner_loc: Point::from((0., 0.)),
             has_corner: false,
+            has_filled_join: false,
             has_left_bend: false,
             attached_left: true,
             row_gap: 0.,
@@ -718,6 +721,44 @@ impl TitleTab {
                 alpha,
             );
         } else {
+            // Bend where the tab's right edge meets the frame, filled in the tab's color. Left
+            // out when another tab follows right away, where the two would overlap.
+            let r = round(f64::from(frame.top_left_radius) * self.config.join_radius_factor);
+            let tab_follows = row.is_some_and(|row| row.index + 1 < row.count);
+            let fits =
+                self.rect.loc.x + width + r <= frame.frame_rect.loc.x + frame.frame_rect.size.w;
+            self.has_filled_join = r > 0. && !tab_follows && fits;
+            self.fillet_radius = 0.;
+            if self.has_filled_join {
+                self.use_shader = true;
+                // The bend sits on the frame's outer top edge, above the focus ring if any.
+                self.fillet_loc =
+                    Point::from((self.rect.loc.x + width, frame.frame_rect.loc.y - r));
+                let fillet_size = Size::from((r, r));
+                let rc2 = (r * std::f64::consts::SQRT_2).ceil() + 1.;
+                self.fillet_fill.update(
+                    fillet_size,
+                    Rectangle::new(gradient_area.loc - self.fillet_loc, gradient_area.size),
+                    gradient.in_,
+                    gradient.from,
+                    gradient.to,
+                    ((gradient.angle as f32) - 90.).to_radians(),
+                    Rectangle::new(
+                        Point::from((r - rc2, -rc2)),
+                        Size::from((rc2 * 2., rc2 * 2.)),
+                    ),
+                    (rc2 - r) as f32,
+                    CornerRadius {
+                        top_left: 0.,
+                        top_right: 0.,
+                        bottom_right: 0.,
+                        bottom_left: rc2 as f32,
+                    },
+                    scale as f32,
+                    alpha,
+                );
+            }
+
             self.background.update(
                 self.rect.size,
                 Rectangle::new(gradient_area.loc - self.rect.loc, gradient_area.size),
@@ -848,6 +889,13 @@ impl TitleTab {
                             .into(),
                     );
                 }
+            } else if self.has_filled_join {
+                push(
+                    self.fillet_fill
+                        .clone()
+                        .with_location(location + self.fillet_loc)
+                        .into(),
+                );
             }
         } else {
             push(
