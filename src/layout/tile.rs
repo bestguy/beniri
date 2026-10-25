@@ -885,6 +885,20 @@ impl<W: LayoutElement> Tile<W> {
         radius
     }
 
+    /// How far the frame extends outside the tile, and its outer top-left radius, for a tabbed
+    /// row whose hidden first tab reaches around this tile's frame.
+    pub fn frame_corner(&self, focus_ring: bool) -> (f64, f64) {
+        let ring_width = if focus_ring && !self.focus_ring.is_off() {
+            self.focus_ring.width()
+        } else {
+            0.
+        };
+        let border_width = self.visual_border_width().unwrap_or(0.);
+        let window_radius = f64::from(self.window.geometry_corner_radius().top_left);
+        let radius = (window_radius + border_width + ring_width) * (1. - self.expanded_progress());
+        (ring_width, radius)
+    }
+
     pub fn title_tab(&self) -> &TitleTab {
         &self.title_tab
     }

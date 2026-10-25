@@ -4143,6 +4143,7 @@ impl<W: LayoutElement> Column<W> {
         let active_idx = self.active_tile_idx;
         let title_tab_row = self.has_title_tab_row();
         let count = self.tiles.len();
+        let (frame_outset, frame_radius) = self.tiles[active_idx].frame_corner(focus_ring);
         let mut next_x = 0.;
         for (tile_idx, (tile, tile_off)) in self.tiles_mut().enumerate() {
             let is_active = is_active && tile_idx == active_idx;
@@ -4153,6 +4154,9 @@ impl<W: LayoutElement> Column<W> {
                     x: next_x,
                     index: tile_idx,
                     count,
+                    shown: active_idx,
+                    frame_outset,
+                    frame_radius,
                 }));
             }
 

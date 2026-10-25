@@ -37,6 +37,12 @@ pub struct TabRow {
     pub x: f64,
     pub index: usize,
     pub count: usize,
+    /// Index of the tile whose window and frame are shown under the row.
+    pub shown: usize,
+    /// How far the shown tile's frame extends outside the tile, and its outer top-left radius.
+    /// A hidden first tab reaches out to that edge and fills in around the rounded corner.
+    pub frame_outset: f64,
+    pub frame_radius: f64,
 }
 
 #[derive(Debug)]
@@ -66,6 +72,11 @@ pub struct TitleTab {
     corner: BorderRenderElement,
     corner_loc: Point<f64, Logical>,
     has_corner: bool,
+    /// Hidden first tab in a row: fills the gap outside the shown frame's rounded top-left
+    /// corner, so the tab meets the frame.
+    skirt: BorderRenderElement,
+    skirt_loc: Point<f64, Logical>,
+    has_skirt: bool,
     /// Filled style: whether the tab's right edge bends into the frame (reuses `fillet_fill`).
     has_filled_join: bool,
     has_left_bend: bool,
@@ -167,6 +178,9 @@ impl TitleTab {
             corner: BorderRenderElement::default(),
             corner_loc: Point::from((0., 0.)),
             has_corner: false,
+            skirt: BorderRenderElement::default(),
+            skirt_loc: Point::from((0., 0.)),
+            has_skirt: false,
             has_filled_join: false,
             has_left_bend: false,
             attached_left: true,
@@ -215,6 +229,7 @@ impl TitleTab {
         self.fillet_l.damage_all();
         self.fillet_fill_l.damage_all();
         self.corner.damage_all();
+        self.skirt.damage_all();
         self.stub.damage_all();
         self.close_button.damage_all();
         self.max_back.damage_all();
@@ -410,25 +425,28 @@ impl TitleTab {
         self.row_gap = round(self.config.row_gap.unwrap_or(join_r));
 
         // The first tab in a row sits flush on the frame's top-left corner like a lone tab does,
-        // so the corner is always squared off under it; the other tabs are free-standing with a
-        // bend on both sides.
+        // squaring it off; the other tabs are free-standing with a bend on both sides and leave
+        // the frame's corner rounded. When the first tab's own tile is hidden, it reaches out to
+        // the shown frame's outer edge instead of its own.
         let first_in_row = row.is_none_or(|row| row.index == 0);
-        self.attached_left = true;
+        let skirt = row.filter(|row| first_in_row && row.shown != row.index);
+        self.attached_left = first_in_row;
         self.has_left_bend = !first_in_row;
+        let left_outset = skirt.map_or(outset, |row| round(row.frame_outset));
         let x0 = match row {
             Some(row) if !first_in_row => row.x,
-            _ => -outset,
+            _ => -left_outset,
         };
 
         let min_w = f64::max(radius * 2., lead + trail);
-        let mut max_w = round(tile_width * self.config.max_width_proportion) + outset;
+        let mut max_w = round(tile_width * self.config.max_width_proportion) + left_outset;
         if let Some(row) = row {
             let count = row.count.max(1) as f64;
             let share = (tile_width - self.row_gap * (count - 1.)) / count;
             max_w = f64::min(max_w, round(share));
         }
         let max_w = f64::max(min_w, max_w);
-        let width = (natural_w + lead + trail + outset).clamp(min_w, max_w);
+        let width = (natural_w + lead + trail + left_outset).clamp(min_w, max_w);
         let width = round(width);
 
         self.rect = Rectangle::new(
@@ -436,12 +454,12 @@ impl TitleTab {
             Size::from((width, height + outset)),
         );
 
-        let avail_w = width - outset - lead - trail;
+        let avail_w = width - left_outset - lead - trail;
         self.text_max_width = (avail_w * scale).floor().max(0.) as i32;
 
         let text_h = self.text_natural_size.h as f64 / scale;
         self.text_loc = Point::from((
-            self.rect.loc.x + outset + lead,
+            self.rect.loc.x + left_outset + lead,
             self.rect.loc.y + round((self.rect.size.h - text_h) / 2.),
         ))
         .to_physical_precise_round(scale)
@@ -449,7 +467,7 @@ impl TitleTab {
 
         self.close_rect = Rectangle::new(
             Point::from((
-                self.rect.loc.x + outset + left_inset,
+                self.rect.loc.x + left_outset + left_inset,
                 self.rect.loc.y + button_inset,
             ))
             .to_physical_precise_round(scale)
@@ -537,7 +555,7 @@ impl TitleTab {
         // element is the window's corner square; the geometry is a rounded rect whose inner edge
         // is the window's arc, wide enough that its outer edge clears the square's far corner.
         let r = round(frame.window_radius);
-        self.has_corner = r > 0.;
+        self.has_corner = self.attached_left && r > 0.;
         if self.has_corner {
             self.corner_loc = frame.window_loc;
             let w = (r * (std::f64::consts::SQRT_2 - 1.)).ceil() + 1.;
@@ -548,6 +566,41 @@ impl TitleTab {
             self.corner.update(
                 Size::from((r, r)),
                 Rectangle::new(gradient_area.loc - self.corner_loc, gradient_area.size),
+                gradient.in_,
+                from,
+                to,
+                ((gradient.angle as f32) - 90.).to_radians(),
+                Rectangle::new(
+                    Point::from((-w, -w)),
+                    Size::from(((r + w) * 2., (r + w) * 2.)),
+                ),
+                w as f32,
+                CornerRadius {
+                    top_left: (r + w) as f32,
+                    top_right: 0.,
+                    bottom_right: 0.,
+                    bottom_left: 0.,
+                },
+                scale as f32,
+                alpha,
+            );
+        }
+
+        // Skirt: same shape as the window corner fill, with its inner arc on the shown frame's
+        // outer corner. It goes behind that frame, so only the part outside the arc shows.
+        let r = skirt.map_or(0., |row| round(row.frame_radius));
+        self.has_skirt = r > 0.;
+        if let Some(row) = skirt.filter(|_| self.has_skirt) {
+            let o = round(row.frame_outset);
+            self.skirt_loc = Point::from((-o, height - o));
+            let w = (r * (std::f64::consts::SQRT_2 - 1.)).ceil() + 1.;
+            let (from, to) = match fill {
+                Some(fill) => (fill, fill),
+                None => (gradient.from, gradient.to),
+            };
+            self.skirt.update(
+                Size::from((r, r)),
+                Rectangle::new(gradient_area.loc - self.skirt_loc, gradient_area.size),
                 gradient.in_,
                 from,
                 to,
@@ -830,6 +883,14 @@ impl TitleTab {
         }
 
         let has_shader = BorderRenderElement::has_shader(renderer);
+        if !with_corner && self.has_skirt && has_shader {
+            push(
+                self.skirt
+                    .clone()
+                    .with_location(location + self.skirt_loc)
+                    .into(),
+            );
+        }
         if with_corner && self.has_corner && has_shader {
             push(
                 self.corner
