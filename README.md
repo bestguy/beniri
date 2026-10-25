@@ -1,6 +1,6 @@
-> **This is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.**
+> **BeNiri is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.**
 >
-> Everything else is unmodified upstream niri: the same config, the same IPC, the same version numbers, the same `niri` binary name. The fork is rebased onto each upstream release and tagged `vXX.YY-beos.N`.
+> Everything else is unmodified upstream niri: the same config, the same IPC, the same version numbers, the same `niri` binary name. The fork is rebased onto each upstream release and tagged `vXX.YY-beniri.N`.
 >
 > Niri deliberately draws no window decorations, and a title tab is one, so this lives here rather than as an upstream pull request. We're grateful to the niri authors for the compositor this is built on. **Please report anything unrelated to the title tab upstream**, and title-tab issues here.
 >

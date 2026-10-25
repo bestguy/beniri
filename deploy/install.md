@@ -1,4 +1,4 @@
-# Installing the fork
+# Installing BeNiri
 
 The fork builds to the same `niri` binary as upstream, with the same session
 files, IPC and config. There are two ways to run it.
@@ -24,7 +24,7 @@ No root is needed. It assumes:
 ### Set up
 
 1. Build: `cargo build --release -p niri`.
-2. Create `~/.config/niri/config-beos.kdl`. It layers the fork's settings on
+2. Create `~/.config/niri/config-beniri.kdl`. It layers the fork's settings on
    top of your regular config, which stays readable by stock niri:
 
        include "config.kdl"
@@ -37,12 +37,12 @@ No root is needed. It assumes:
            }
        }
 
-3. Run `deploy/install.sh`. It copies the binary to `~/.local/bin/niri-beos`,
+3. Run `deploy/install.sh`. It copies the binary to `~/.local/bin/beniri`,
    validates the config, and writes a systemd drop-in at
-   `~/.config/systemd/user/niri.service.d/override.conf` that makes
+   `~/.config/systemd/user/niri.service.d/beniri.conf` that makes
    `niri.service` run
 
-       ~/.local/bin/niri-beos --session -c ~/.config/niri/config-beos.kdl
+       ~/.local/bin/beniri --session -c ~/.config/niri/config-beniri.kdl
 
 4. Log out and in. The session now runs the fork.
 
@@ -53,10 +53,10 @@ working too, since `config.kdl` is still the file they edit.
 ### Going back
 
 Run `deploy/rollback.sh`, then log out and in. It only removes the drop-in;
-the fork binary and `config-beos.kdl` are left in place, unused.
+the fork binary and `config-beniri.kdl` are left in place, unused.
 
 If a login ever fails, do the same from a TTY: log in, delete the
-`override.conf` file, run `systemctl --user daemon-reload`, and log in again.
+`beniri.conf` file, run `systemctl --user daemon-reload`, and log in again.
 
 ### Updating
 
