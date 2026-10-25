@@ -252,6 +252,11 @@ pub trait LayoutElement {
         None
     }
 
+    /// Whether the element is in the floating layout, as last set by `set_floating()`.
+    fn is_floating(&self) -> bool {
+        false
+    }
+
     fn configure_intent(&self) -> ConfigureIntent;
     fn send_pending_configure(&mut self);
 

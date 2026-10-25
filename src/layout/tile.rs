@@ -568,6 +568,8 @@ impl<W: LayoutElement> Tile<W> {
             let title = self.window.title().unwrap_or_default();
             self.title_tab.update_render_elements(
                 self.visual_tab_height().is_some(),
+                // The button maximizes the column, which floating windows don't have.
+                !self.window.is_floating(),
                 animated_tile_size.w,
                 &title,
                 is_active,

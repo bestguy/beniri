@@ -45,6 +45,8 @@ pub struct TitleTab {
 
     // Everything below is computed in update_render_elements().
     visible: bool,
+    /// Whether the maximize button is shown: on in the config and the window can be maximized.
+    show_maximize: bool,
     /// Tab background rectangle, relative to the tile origin.
     rect: Rectangle<f64, Logical>,
     background: BorderRenderElement,
@@ -158,6 +160,7 @@ impl TitleTab {
             stub_loc: Point::from((0., 0.)),
             outline_width: 0.,
             has_fill: false,
+            show_maximize: false,
             draw_outline: false,
             solid: SolidColorBuffer::new((0., 0.), [0., 0., 0., 0.]),
             use_shader: false,
@@ -268,7 +271,7 @@ impl TitleTab {
 
         if self.config.close_button && with_slack(self.close_rect).contains(point) {
             Some(TitleTabHit::Close)
-        } else if self.config.maximize_button && with_slack(self.max_rect).contains(point) {
+        } else if self.show_maximize && with_slack(self.max_rect).contains(point) {
             Some(TitleTabHit::Maximize)
         } else {
             Some(TitleTabHit::Body)
@@ -279,6 +282,7 @@ impl TitleTab {
     pub fn update_render_elements(
         &mut self,
         visible: bool,
+        can_maximize: bool,
         tile_width: f64,
         title: &str,
         is_active: bool,
@@ -289,6 +293,7 @@ impl TitleTab {
         alpha: f32,
     ) {
         self.visible = visible;
+        self.show_maximize = self.config.maximize_button && can_maximize;
         self.alpha = alpha;
         if !visible {
             return;
@@ -373,12 +378,12 @@ impl TitleTab {
         let lead = left_inset + button_w + button_gap;
 
         // Maximize button box after the title, same size as the close button.
-        let max_w_btn = if self.config.maximize_button {
+        let max_w_btn = if self.show_maximize {
             round(self.config.close_button_size)
         } else {
             0.
         };
-        let trail = if self.config.maximize_button {
+        let trail = if self.show_maximize {
             button_gap + max_w_btn + button_inset
         } else {
             padding
@@ -466,7 +471,7 @@ impl TitleTab {
 
         // Maximize button: two overlapping outlined squares, BeOS zoom style. The front square
         // is filled so it covers the back one.
-        if self.config.maximize_button {
+        if self.show_maximize {
             let s = self.max_rect.size.w;
             let line = f64::max(1. / scale, round(s / 8.));
             let back = round(s * 0.72);
@@ -701,7 +706,7 @@ impl TitleTab {
                     .into(),
             );
         }
-        if self.config.maximize_button && self.max_rect.size.w > 0. {
+        if self.show_maximize && self.max_rect.size.w > 0. {
             push(
                 self.max_front
                     .clone()

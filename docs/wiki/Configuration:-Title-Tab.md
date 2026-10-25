@@ -9,6 +9,7 @@ It shows the window title, a close button before it and a maximize (zoom) button
 * Drag the tab to move the window, exactly like dragging it with the move modifier.
 * Click the close button to close the window.
 * Click the maximize button to toggle the column between its current width and the full width of the screen.
+  Floating windows have no column, so their tab has no maximize button.
 
 The tab takes its colors from the focus ring (or the border, if the focus ring is off), so it blends with the rest of your frame without extra configuration.
 Its rounded corners follow the window's `geometry-corner-radius`.
@@ -114,7 +115,8 @@ Set `close-button false` to hide it.
 
 Draws the BeOS zoom button (two overlapping squares) after the title.
 Clicking it toggles the column between its current width and the full width of the screen (`maximize-column`).
-Set `maximize-button false` to hide it.
+It is not shown on floating windows.
+Set `maximize-button false` to hide it everywhere.
 
 ### Colors
 

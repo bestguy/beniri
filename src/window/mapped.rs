@@ -982,6 +982,10 @@ impl LayoutElement for Mapped {
         with_toplevel_role(self.toplevel(), |role| role.title.clone())
     }
 
+    fn is_floating(&self) -> bool {
+        self.is_floating
+    }
+
     fn set_activated(&mut self, active: bool) {
         let changed = self.toplevel().with_pending_state(|state| {
             if active {
