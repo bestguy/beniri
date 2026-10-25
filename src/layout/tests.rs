@@ -3732,6 +3732,39 @@ fn workspace_render_geo_at_fractional_scale() {
     );
 }
 
+#[test]
+fn title_tab_follows_focus_ring_on_unfocused_output() {
+    let ops = [
+        Op::AddOutput(1),
+        Op::AddWindow {
+            params: TestWindowParams::new(1),
+        },
+        Op::AddOutput(2),
+        Op::FocusOutput(2),
+        Op::AddWindow {
+            params: TestWindowParams::new(2),
+        },
+        Op::CompleteAnimations,
+    ];
+
+    let mut options = Options::default();
+    options.layout.title_tab.off = false;
+    let mut layout = check_ops_with_options(options, ops);
+    layout.update_render_elements(None);
+
+    // The focus ring is drawn on the active window of every output, not just the focused one,
+    // so the tab must sit over the ring on both.
+    for mon in layout.monitors() {
+        let tile = mon.active_workspace_ref().tiles().next().unwrap();
+        assert_eq!(
+            tile.title_tab().rect().loc.x,
+            -tile.focus_ring().width(),
+            "tab must line up with the focus ring on {}",
+            mon.output_name(),
+        );
+    }
+}
+
 fn parent_id_causes_loop(layout: &Layout<TestWindow>, id: usize, mut parent_id: usize) -> bool {
     if parent_id == id {
         return true;

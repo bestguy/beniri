@@ -475,7 +475,15 @@ impl<W: LayoutElement> Tile<W> {
                 .is_some_and(|alpha| !alpha.anim.is_done())
     }
 
-    pub fn update_render_elements(&mut self, is_active: bool, view_rect: Rectangle<f64, Logical>) {
+    /// `focus_ring` is whether this tile will be rendered with the focus ring. It differs from
+    /// `is_active`: niri draws the ring (in the inactive color) on unfocused monitors and during
+    /// interactive move too, and the title tab has to line up with it.
+    pub fn update_render_elements(
+        &mut self,
+        is_active: bool,
+        focus_ring: bool,
+        view_rect: Rectangle<f64, Logical>,
+    ) {
         // Consumed every update so a tile leaving a tabbed column drops its row placement.
         let title_tab_row = self.title_tab_row.take();
         let rules = self.window.rules();
@@ -522,7 +530,7 @@ impl<W: LayoutElement> Tile<W> {
         // border, or just the window edge.
         {
             let is_urgent = self.window.is_urgent();
-            let ring_drawn = is_active && !self.focus_ring.is_off();
+            let ring_drawn = focus_ring && !self.focus_ring.is_off();
             let ring_width = if ring_drawn {
                 self.focus_ring.width()
             } else {

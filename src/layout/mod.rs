@@ -2807,7 +2807,7 @@ impl<W: LayoutElement> Layout<W> {
                     Rectangle::new(pos_within_output.upscale(-1.), output_size(&move_.output))
                         .downscale(zoom);
 
-                move_.tile.update_render_elements(true, view_rect);
+                move_.tile.update_render_elements(true, true, view_rect);
             }
         }
 
@@ -2830,8 +2830,13 @@ impl<W: LayoutElement> Layout<W> {
                 let is_active = self.is_active
                     && idx == *active_monitor_idx
                     && !matches!(self.interactive_move, Some(InteractiveMoveState::Moving(_)));
+                // Matches the focus_ring flag that rendering passes (see Niri::render()).
+                let focus_ring = !matches!(
+                    &self.interactive_move,
+                    Some(InteractiveMoveState::Moving(move_)) if move_.output == mon.output
+                );
                 mon.set_overview_progress(self.overview_progress.as_ref());
-                mon.update_render_elements(is_active);
+                mon.update_render_elements(is_active, focus_ring);
             }
         }
     }
@@ -4689,7 +4694,7 @@ impl<W: LayoutElement> Layout<W> {
                 let view_rect =
                     Rectangle::new(pos_within_output.upscale(-1.), output_size(&move_.output))
                         .downscale(zoom);
-                move_.tile.update_render_elements(false, view_rect);
+                move_.tile.update_render_elements(false, false, view_rect);
 
                 move_.tile.store_unmap_snapshot_if_empty(
                     renderer,
