@@ -6,11 +6,15 @@
 
 It shows the window title, click to focus, drag to move, a close button before the title and a maximize (zoom) button after it.
 
-`TODO: screenshot`
+<img width="393" alt="A window with a yellow BeOS-style title tab showing a close button, the title and a maximize button" src="docs/wiki/img/title-tab/main.png">
+
+<img width="764" alt="A focused terminal with a yellow tab and frame above an unfocused browser with a gray tab" src="docs/wiki/img/title-tab/windows.png">
 
 It also changes tabbed columns to show a row of tabs instead of niri's side indicator.
 
-`TODO: screenshot`
+<img width="702" alt="A tabbed column showing a row of tabs, with the first tab focused" src="docs/wiki/img/title-tab/tab2.png">
+
+<img width="702" alt="The same tabbed column with the third tab focused" src="docs/wiki/img/title-tab/tab3.png">
 
 ### Why?
 
@@ -38,7 +42,7 @@ The only other changed default is the accent: the focus ring's active color is B
 
 The tab comes filled in the frame color, or can be configured as an outline joined to the focus ring (`style "outline"`).
 
-`TODO: screenshot`
+<img width="688" alt="The outline style: the focused tab drawn as an outline joined to the focus ring" src="docs/wiki/img/title-tab/border.png">
 
 See [Configuration: Title Tab](docs/wiki/Configuration:-Title-Tab.md) for every option, and [deploy/install.md](deploy/install.md) for running the fork alongside stock niri.
 
