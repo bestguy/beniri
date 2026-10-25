@@ -62,6 +62,10 @@ pub struct TitleTab {
     fillet_l: BorderRenderElement,
     fillet_fill_l: BorderRenderElement,
     fillet_l_loc: Point<f64, Logical>,
+    /// Fills the gap between the squared-off frame corner and the rounded window corner.
+    corner: BorderRenderElement,
+    corner_loc: Point<f64, Logical>,
+    has_corner: bool,
     has_left_bend: bool,
     /// Whether the tab sits on the frame's top-left corner (squaring it off).
     attached_left: bool,
@@ -136,6 +140,11 @@ pub struct FrameInfo {
     pub view_rect: Rectangle<f64, Logical>,
     /// Gradient (or solid color) of the frame, used when the tab has no color of its own.
     pub gradient: Gradient,
+    /// Top-left of the window relative to the tile origin.
+    pub window_loc: Point<f64, Logical>,
+    /// The window's own top-left corner radius. The frame's corner is squared off under the tab,
+    /// and the gap between it and the rounded window corner is filled in the tab's color.
+    pub window_radius: f64,
 }
 
 impl TitleTab {
@@ -153,6 +162,9 @@ impl TitleTab {
             fillet_l: BorderRenderElement::default(),
             fillet_fill_l: BorderRenderElement::default(),
             fillet_l_loc: Point::from((0., 0.)),
+            corner: BorderRenderElement::default(),
+            corner_loc: Point::from((0., 0.)),
+            has_corner: false,
             has_left_bend: false,
             attached_left: true,
             row_gap: 0.,
@@ -199,6 +211,7 @@ impl TitleTab {
         self.fillet_fill.damage_all();
         self.fillet_l.damage_all();
         self.fillet_fill_l.damage_all();
+        self.corner.damage_all();
         self.stub.damage_all();
         self.close_button.damage_all();
         self.max_back.damage_all();
@@ -516,6 +529,42 @@ impl TitleTab {
             GradientRelativeTo::WorkspaceView => frame.view_rect,
         };
 
+        // Window corner: the frame's top-left is squared off under the tab, but the window keeps
+        // its rounded corner. Fill the gap in the tab's color so the tab flows around it. The
+        // element is the window's corner square; the geometry is a rounded rect whose inner edge
+        // is the window's arc, wide enough that its outer edge clears the square's far corner.
+        let r = round(frame.window_radius);
+        self.has_corner = r > 0.;
+        if self.has_corner {
+            self.corner_loc = frame.window_loc;
+            let w = (r * (std::f64::consts::SQRT_2 - 1.)).ceil() + 1.;
+            let (from, to) = match fill {
+                Some(fill) => (fill, fill),
+                None => (gradient.from, gradient.to),
+            };
+            self.corner.update(
+                Size::from((r, r)),
+                Rectangle::new(gradient_area.loc - self.corner_loc, gradient_area.size),
+                gradient.in_,
+                from,
+                to,
+                ((gradient.angle as f32) - 90.).to_radians(),
+                Rectangle::new(
+                    Point::from((-w, -w)),
+                    Size::from(((r + w) * 2., (r + w) * 2.)),
+                ),
+                w as f32,
+                CornerRadius {
+                    top_left: (r + w) as f32,
+                    top_right: 0.,
+                    bottom_right: 0.,
+                    bottom_left: 0.,
+                },
+                scale as f32,
+                alpha,
+            );
+        }
+
         if let Some(fill) = fill {
             // Outline style: the tab is a frame-colored line around a filled interior. The
             // geometry extends below the element so the bottom edge is clipped off and the tab
@@ -691,6 +740,7 @@ impl TitleTab {
         &self,
         renderer: &mut impl NiriRenderer,
         location: Point<f64, Logical>,
+        with_corner: bool,
         push: &mut dyn FnMut(TitleTabRenderElement),
     ) {
         if !self.visible {
@@ -739,6 +789,14 @@ impl TitleTab {
         }
 
         let has_shader = BorderRenderElement::has_shader(renderer);
+        if with_corner && self.has_corner && has_shader {
+            push(
+                self.corner
+                    .clone()
+                    .with_location(location + self.corner_loc)
+                    .into(),
+            );
+        }
         if self.use_shader && has_shader {
             if self.draw_outline {
                 push(

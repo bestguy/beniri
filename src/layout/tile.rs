@@ -424,7 +424,8 @@ impl<W: LayoutElement> Tile<W> {
 
         let window_size = self.window_size();
         let radius = self
-            .corner_radius()
+            .window
+            .geometry_corner_radius()
             .fit_to(window_size.w as f32, window_size.h as f32);
         self.rounded_corner_damage.set_corner_radius(radius);
     }
@@ -582,6 +583,8 @@ impl<W: LayoutElement> Tile<W> {
                     frame_rect,
                     view_rect,
                     gradient,
+                    window_loc: self.window_loc(),
+                    window_radius: f64::from(window_radius.top_left) * (1. - expanded_progress),
                 },
                 title_tab_row,
                 self.scale,
@@ -904,8 +907,9 @@ impl<W: LayoutElement> Tile<W> {
     ) {
         if self.visual_tab_height().is_some() {
             let location = location + self.bob_offset();
+            // The hidden tile's window isn't drawn, so neither is the fill around its corner.
             self.title_tab
-                .render(renderer, location, &mut |elem| push(elem.into()));
+                .render(renderer, location, false, &mut |elem| push(elem.into()));
         }
     }
 
@@ -1279,8 +1283,10 @@ impl<W: LayoutElement> Tile<W> {
         // Clip to geometry including during the fullscreen animation to help with buggy clients
         // that submit a full-sized buffer before acking the fullscreen state (Firefox).
         let clip_to_geometry = fullscreen_progress < 1. && rules.clip_to_geometry == Some(true);
+        // The window keeps its own rounded corners; only the frame is squared off under the tab.
         let radius = self
-            .corner_radius()
+            .window
+            .geometry_corner_radius()
             .scaled_by(1. - expanded_progress as f32);
 
         // Popups go on top, whether it's resize or not.
@@ -1492,7 +1498,7 @@ impl<W: LayoutElement> Tile<W> {
 
         if self.visual_tab_height().is_some() {
             self.title_tab
-                .render(ctx.renderer, location, &mut |elem| push(elem.into()));
+                .render(ctx.renderer, location, true, &mut |elem| push(elem.into()));
         }
 
         if let Some(width) = self.visual_border_width() {

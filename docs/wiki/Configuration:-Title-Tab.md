@@ -13,6 +13,7 @@ It shows the window title, a close button before it and a maximize (zoom) button
 
 The tab takes its colors from the focus ring (or the border, if the focus ring is off), so it blends with the rest of your frame without extra configuration.
 Its rounded corners follow the window's `geometry-corner-radius`.
+The frame's top-left corner is squared off under the tab, while the window keeps its own rounded corner; the gap between them is filled in the tab's color.
 
 In a tabbed column (`toggle-column-tabbed-display`), the windows' tabs are laid out in a row along the top, like browser tabs, and niri's side tab indicator is hidden.
 Clicking a tab in the row switches to that window.
