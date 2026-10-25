@@ -899,6 +899,19 @@ impl XdgShellHandler for State {
 
     fn title_changed(&mut self, toplevel: ToplevelSurface) {
         self.update_window_rules(&toplevel);
+
+        // Fork: the title tab shows the title, and set_title isn't followed by a commit, so
+        // redraw here or the tab keeps the old title until something else redraws.
+        if !self.niri.config.borrow().layout.title_tab.off {
+            if let Some((_, Some(output))) = self
+                .niri
+                .layout
+                .find_window_and_output(toplevel.wl_surface())
+            {
+                let output = output.clone();
+                self.niri.queue_redraw(&output);
+            }
+        }
     }
 
     fn parent_changed(&mut self, toplevel: ToplevelSurface) {
