@@ -1397,6 +1397,8 @@ mod tests {
                     join_radius_factor: 0.5,
                     row_gap: None,
                     fill_color: None,
+                    bar_color: None,
+                    inactive_bar_color: None,
                     close_button: true,
                     close_button_size: 10.0,
                     maximize_button: true,

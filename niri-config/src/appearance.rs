@@ -1361,6 +1361,8 @@ pub enum TitleTabStyle {
     Filled,
     /// Frame-colored outline around a `fill-color` interior, joined to the frame.
     Outline,
+    /// Filled tab followed by a title bar that runs to the frame's right edge, FM TOWNS style.
+    Bar,
 }
 
 /// BeOS-style title tab drawn by the compositor above the top-left of each window.
@@ -1385,6 +1387,10 @@ pub struct TitleTab {
     /// Interior color for the outline style. A transparent fill shows the wallpaper through the
     /// tab. Defaults to a dark gray.
     pub fill_color: Option<Color>,
+    /// Bar style: interior of the bar right of the active tab. Defaults to a light gray.
+    pub bar_color: Option<Color>,
+    /// Bar style: fill of the whole bar, tab included, on inactive windows.
+    pub inactive_bar_color: Option<Color>,
     /// Whether to draw a close button before the title.
     pub close_button: bool,
     /// Side length of the close button square.
@@ -1417,6 +1423,8 @@ impl Default for TitleTab {
             join_radius_factor: 0.5,
             row_gap: None,
             fill_color: None,
+            bar_color: None,
+            inactive_bar_color: None,
             close_button: true,
             close_button_size: 10.,
             maximize_button: true,
@@ -1467,6 +1475,8 @@ impl MergeWith<TitleTabPart> for TitleTab {
         merge_clone_opt!(
             (self, part),
             fill_color,
+            bar_color,
+            inactive_bar_color,
             active_text_color,
             inactive_text_color,
             urgent_text_color,
@@ -1498,6 +1508,10 @@ pub struct TitleTabPart {
     pub row_gap: Option<FloatOrInt<0, 65535>>,
     #[knuffel(child)]
     pub fill_color: Option<Color>,
+    #[knuffel(child)]
+    pub bar_color: Option<Color>,
+    #[knuffel(child)]
+    pub inactive_bar_color: Option<Color>,
     #[knuffel(child)]
     pub close_button: Option<Flag>,
     #[knuffel(child, unwrap(argument))]

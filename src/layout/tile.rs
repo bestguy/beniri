@@ -2,7 +2,7 @@ use core::f64;
 use std::rc::Rc;
 
 use niri_config::utils::MergeWith as _;
-use niri_config::{Color, CornerRadius, Gradient, GradientInterpolation};
+use niri_config::{Color, CornerRadius, Gradient, GradientInterpolation, TitleTabStyle};
 use niri_ipc::WindowLayout;
 use smithay::backend::renderer::element::{Element, Kind};
 use smithay::backend::renderer::gles::GlesRenderer;
@@ -424,8 +424,7 @@ impl<W: LayoutElement> Tile<W> {
 
         let window_size = self.window_size();
         let radius = self
-            .window
-            .geometry_corner_radius()
+            .window_radius()
             .fit_to(window_size.w as f32, window_size.h as f32);
         self.rounded_corner_damage.set_corner_radius(radius);
     }
@@ -525,7 +524,7 @@ impl<W: LayoutElement> Tile<W> {
             view_rect.size,
         );
 
-        let window_radius = self.window.geometry_corner_radius();
+        let window_radius = self.window_radius();
 
         // Title tab. It attaches to whichever frame is drawn: the focus ring (active tile), the
         // border, or just the window edge.
@@ -541,7 +540,11 @@ impl<W: LayoutElement> Tile<W> {
                 Point::from((-ring_width, tab_height - ring_width)),
                 frame_size + Size::from((ring_width * 2., ring_width * 2.)),
             );
-            let top_left_radius = f64::from(window_radius.top_left) + border_width + ring_width;
+            // Taken from the window's configured radius: under a bar the window's top corners
+            // are square, but the bar keeps rounded corners.
+            let top_left_radius = f64::from(self.window.geometry_corner_radius().top_left)
+                + border_width
+                + ring_width;
             let line_width = if ring_drawn {
                 ring_width
             } else if border_width > 0. {
@@ -876,9 +879,19 @@ impl<W: LayoutElement> Tile<W> {
         Some(self.title_tab.height())
     }
 
+    /// The window's own corner radius. Under a bar-style title tab the top corners are square.
+    fn window_radius(&self) -> CornerRadius {
+        let mut radius = self.window.geometry_corner_radius();
+        if !self.title_tab.is_off() && self.title_tab.config().style == TitleTabStyle::Bar {
+            radius.top_left = 0.;
+            radius.top_right = 0.;
+        }
+        radius
+    }
+
     /// Window corner radius, with the top-left corner squared off when the title tab is attached.
     fn corner_radius(&self) -> CornerRadius {
-        let mut radius = self.window.geometry_corner_radius();
+        let mut radius = self.window_radius();
         if self.visual_tab_height().is_some() && self.title_tab.is_attached_left() {
             radius.top_left = 0.;
         }
@@ -894,7 +907,7 @@ impl<W: LayoutElement> Tile<W> {
             0.
         };
         let border_width = self.visual_border_width().unwrap_or(0.);
-        let window_radius = f64::from(self.window.geometry_corner_radius().top_left);
+        let window_radius = f64::from(self.window_radius().top_left);
         let radius = (window_radius + border_width + ring_width) * (1. - self.expanded_progress());
         (ring_width, radius)
     }
@@ -905,6 +918,10 @@ impl<W: LayoutElement> Tile<W> {
 
     pub fn set_title_tab_row(&mut self, row: Option<TabRow>) {
         self.title_tab_row = row;
+    }
+
+    pub fn set_title_tab_bar_start(&mut self, x: f64) {
+        self.title_tab.set_bar_start(x);
     }
 
     /// Hit-tests only the title tab, for tiles hidden in a tabbed column.
@@ -1299,8 +1316,7 @@ impl<W: LayoutElement> Tile<W> {
         let clip_to_geometry = fullscreen_progress < 1. && rules.clip_to_geometry == Some(true);
         // The window keeps its own rounded corners; only the frame is squared off under the tab.
         let radius = self
-            .window
-            .geometry_corner_radius()
+            .window_radius()
             .scaled_by(1. - expanded_progress as f32);
 
         // Popups go on top, whether it's resize or not.

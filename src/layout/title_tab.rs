@@ -30,6 +30,10 @@ use crate::utils::to_physical_precise_round;
 /// Largest texture dimension we'll ask the GPU for.
 const MAX_TEXTURE_SIZE: i32 = 16383;
 
+/// Bar style defaults for `bar-color` and `inactive-bar-color`.
+const DEFAULT_BAR_COLOR: [u8; 3] = [224, 224, 224];
+const DEFAULT_INACTIVE_BAR_COLOR: [u8; 3] = [200, 200, 200];
+
 /// Placement of a tab within a row of tabs (tabbed columns).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabRow {
@@ -92,6 +96,8 @@ pub struct TitleTab {
     has_fill: bool,
     /// Whether to draw the outline (only when the tile has a frame to join).
     draw_outline: bool,
+    /// Bar style: the tab's top and sides are stroked in the frame color (reuses `outline`).
+    has_bar_outline: bool,
     solid: SolidColorBuffer,
     use_shader: bool,
     alpha: f32,
@@ -109,13 +115,61 @@ pub struct TitleTab {
     max_front_fill: BorderRenderElement,
     max_back_loc: Point<f64, Logical>,
     max_front_loc: Point<f64, Logical>,
+    /// Bar style: grid lines inside the close button, relative to the tile origin.
+    close_grid: Vec<(Point<f64, Logical>, SolidColorBuffer)>,
     /// Maximum text width in physical pixels; longer titles get ellipsized.
     text_max_width: i32,
     /// Measured natural text size in physical pixels.
     text_natural_size: Size<i32, Physical>,
     title: String,
 
+    /// Bar style: what the title bar right of the tab needs, kept so a tabbed column can move its
+    /// start to the end of the row after all tabs are laid out. `None` when this tab has no bar.
+    bar_params: Option<BarParams>,
+    has_bar: bool,
+    bar_rect: Rectangle<f64, Logical>,
+    bar_fill: BorderRenderElement,
+    /// Frame-colored top and right edges of the bar.
+    bar_line: BorderRenderElement,
+    /// Fills the gap between the squared-off frame corner and the rounded window corner on the
+    /// top right, like `corner` does on the top left.
+    corner_r: BorderRenderElement,
+    corner_r_loc: Point<f64, Logical>,
+    has_corner_r: bool,
+    /// Maximize button at the bar's right end, relative to the tile origin.
+    bar_max_rect: Rectangle<f64, Logical>,
+    has_bar_max: bool,
+    bar_max_icon: RefCell<Option<IconTexture>>,
+
     texture: RefCell<Option<TextTexture>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BarParams {
+    /// Tile-relative top, bottom and right edges of the bar.
+    top: f64,
+    bottom: f64,
+    right: f64,
+    line_width: f64,
+    draw_line: bool,
+    fill: Color,
+    gradient: Gradient,
+    gradient_area: Rectangle<f64, Logical>,
+    radius: f64,
+    scale: f64,
+    alpha: f32,
+    /// Maximize button at the bar's right end: side length, inset from the right, tile-relative
+    /// top, and icon line width. `None` when the window can't be maximized.
+    max_button: Option<(f64, f64, f64, f64)>,
+    icon_color: Color,
+}
+
+#[derive(Debug)]
+struct IconTexture {
+    size: i32,
+    line: i32,
+    color: Color,
+    buffer: TextureBuffer<GlesTexture>,
 }
 
 #[derive(Debug)]
@@ -191,6 +245,7 @@ impl TitleTab {
             has_fill: false,
             show_maximize: false,
             draw_outline: false,
+            has_bar_outline: false,
             solid: SolidColorBuffer::new((0., 0.), [0., 0., 0., 0.]),
             use_shader: false,
             alpha: 1.,
@@ -199,6 +254,7 @@ impl TitleTab {
             text_loc: Point::from((0., 0.)),
             close_rect: Rectangle::default(),
             close_button: BorderRenderElement::default(),
+            close_grid: Vec::new(),
             max_rect: Rectangle::default(),
             max_back: BorderRenderElement::default(),
             max_front: BorderRenderElement::default(),
@@ -208,6 +264,17 @@ impl TitleTab {
             text_max_width: 0,
             text_natural_size: Size::from((0, 0)),
             title: String::new(),
+            bar_params: None,
+            has_bar: false,
+            bar_rect: Rectangle::default(),
+            bar_fill: BorderRenderElement::default(),
+            bar_line: BorderRenderElement::default(),
+            corner_r: BorderRenderElement::default(),
+            corner_r_loc: Point::from((0., 0.)),
+            has_corner_r: false,
+            bar_max_rect: Rectangle::default(),
+            has_bar_max: false,
+            bar_max_icon: RefCell::new(None),
             texture: RefCell::new(None),
         }
     }
@@ -235,6 +302,9 @@ impl TitleTab {
         self.max_back.damage_all();
         self.max_front.damage_all();
         self.max_front_fill.damage_all();
+        self.bar_fill.damage_all();
+        self.bar_line.damage_all();
+        self.corner_r.damage_all();
     }
 
     /// Tab background rectangle relative to the tile origin, valid after update_render_elements.
@@ -274,6 +344,19 @@ impl TitleTab {
         self.rect.loc.x + self.rect.size.w + self.row_gap
     }
 
+    /// Tile-relative X of this tab's right edge.
+    pub fn right_x(&self) -> f64 {
+        self.rect.loc.x + self.rect.size.w
+    }
+
+    /// Starts the bar at tile-relative `x` instead of this tab's right edge, for a tabbed column
+    /// whose shown tile draws the bar after the whole row.
+    pub fn set_bar_start(&mut self, x: f64) {
+        if self.visible {
+            self.update_bar(x);
+        }
+    }
+
     pub fn is_off(&self) -> bool {
         self.config.off
     }
@@ -288,7 +371,7 @@ impl TitleTab {
 
     /// Returns what part of the tab `point` (relative to the tile origin) hits, if any.
     pub fn hit(&self, point: Point<f64, Logical>) -> Option<TitleTabHit> {
-        if !self.visible || !self.rect.contains(point) {
+        if !self.visible {
             return None;
         }
 
@@ -299,6 +382,16 @@ impl TitleTab {
             rect.size += Size::from((slack * 2., slack * 2.));
             rect
         };
+
+        if !self.rect.contains(point) {
+            if !self.has_bar || !self.bar_rect.contains(point) {
+                return None;
+            }
+            if self.has_bar_max && with_slack(self.bar_max_rect).contains(point) {
+                return Some(TitleTabHit::Maximize);
+            }
+            return Some(TitleTabHit::Body);
+        }
 
         if self.config.close_button && with_slack(self.close_rect).contains(point) {
             Some(TitleTabHit::Close)
@@ -324,7 +417,8 @@ impl TitleTab {
         alpha: f32,
     ) {
         self.visible = visible;
-        self.show_maximize = self.config.maximize_button && can_maximize;
+        let is_bar = self.config.style == TitleTabStyle::Bar;
+        self.show_maximize = self.config.maximize_button && can_maximize && !is_bar;
         self.alpha = alpha;
         if !visible {
             return;
@@ -340,10 +434,20 @@ impl TitleTab {
         }
 
         // Colors.
+        let inactive_bar_color = self.config.inactive_bar_color.unwrap_or_else(|| {
+            let [r, g, b] = DEFAULT_INACTIVE_BAR_COLOR;
+            Color::from_rgba8_unpremul(r, g, b, 255)
+        });
         let (color, gradient) = if is_urgent {
             (self.config.urgent_color, self.config.urgent_gradient)
         } else if is_active {
             (self.config.active_color, self.config.active_gradient)
+        } else if is_bar {
+            // An inactive bar is one color, tab included.
+            (
+                Some(self.config.inactive_color.unwrap_or(inactive_bar_color)),
+                self.config.inactive_gradient,
+            )
         } else {
             (self.config.inactive_color, self.config.inactive_gradient)
         };
@@ -364,7 +468,7 @@ impl TitleTab {
                     .fill_color
                     .unwrap_or_else(|| Color::from_rgba8_unpremul(24, 24, 24, 255)),
             ),
-            TitleTabStyle::Filled => None,
+            TitleTabStyle::Filled | TitleTabStyle::Bar => None,
         };
         self.has_fill = fill.is_some();
         // Like the focus ring, the outline only appears on tiles that have a frame.
@@ -422,7 +526,16 @@ impl TitleTab {
 
         // Bend and gap sizes are fixed per tab so a row lines up regardless of focus.
         let join_r = round(f64::from(frame.top_left_radius) * self.config.join_radius_factor);
-        self.row_gap = round(self.config.row_gap.unwrap_or(join_r));
+        // Bar-style tabs sit side by side like segments of one bar, overlapping by the outline
+        // width so neighbors share one line.
+        self.has_bar_outline = is_bar && frame.frame_drawn;
+        let bar_outline_w = if self.has_bar_outline {
+            round(frame.line_width)
+        } else {
+            0.
+        };
+        let default_gap = if is_bar { -bar_outline_w } else { join_r };
+        self.row_gap = round(self.config.row_gap.unwrap_or(default_gap));
 
         // The first tab in a row sits flush on the frame's top-left corner like a lone tab does,
         // squaring it off; the other tabs are free-standing with a bend on both sides and leave
@@ -486,8 +599,10 @@ impl TitleTab {
         );
 
         // Close button: an outlined square in the text color.
+        // The bar style uses a thinner stroke, matching its maximize icon.
+        let close_line_div = if is_bar { 10. } else { 8. };
         if self.config.close_button {
-            let line = f64::max(1. / scale, round(button_w / 8.));
+            let line = f64::max(1. / scale, round(button_w / close_line_div));
             self.close_button.update(
                 self.close_rect.size,
                 Rectangle::from_size(self.close_rect.size),
@@ -501,6 +616,41 @@ impl TitleTab {
                 scale as f32,
                 alpha,
             );
+        }
+
+        // Bar style: a 5x5 grid inside the close button, FM TOWNS style, or 3x3 when the cells
+        // would get too small. Inner lines match the outline; cells need two physical pixels,
+        // and a grid whose cells come out even wins over one that doesn't.
+        self.close_grid.clear();
+        if self.config.close_button && is_bar {
+            let size = (button_w * scale).round();
+            let line = f64::max(1., (round(button_w / close_line_div) * scale).round());
+            let inner = size - line * 2.;
+            let space = |n: f64| inner - (n - 1.) * line;
+            let fits = |n: &f64| space(*n) >= n * 2.;
+            let cells = [5., 3.]
+                .into_iter()
+                .filter(fits)
+                .find(|&n| space(n) % n == 0.)
+                .or_else(|| [5., 3.].into_iter().find(fits));
+            if let Some(n) = cells {
+                let cell = (inner - (n - 1.) * line) / n;
+                let origin = self.close_rect.loc;
+                for i in 1..n as i32 {
+                    let i = f64::from(i);
+                    let pos = (line + i * cell + (i - 1.) * line).round() / scale;
+                    let start = line / scale;
+                    let len = inner / scale;
+                    let thin = line / scale;
+                    let color = self.text_color.to_array_premul();
+                    let vertical = SolidColorBuffer::new((thin, len), color);
+                    let horizontal = SolidColorBuffer::new((len, thin), color);
+                    self.close_grid
+                        .push((origin + Point::from((pos, start)), vertical));
+                    self.close_grid
+                        .push((origin + Point::from((start, pos)), horizontal));
+                }
+            }
         }
 
         // Maximize button: two overlapping outlined squares, BeOS zoom style. The front square
@@ -536,9 +686,18 @@ impl TitleTab {
         }
 
         // Background. Only the top corners are rounded: the bottom merges into the frame.
+        // Bar-style tabs are segments of one bar, so only its outer corners are rounded: the
+        // first tab's top-left, and the last tab's top-right when no bar is left after it.
+        let (round_left, round_right) = if is_bar {
+            let last_in_row = row.is_none_or(|row| row.index + 1 == row.count);
+            let frame_right = frame.frame_rect.loc.x + frame.frame_rect.size.w;
+            (first_in_row, last_in_row && x0 + width >= frame_right)
+        } else {
+            (true, true)
+        };
         let corner_radius = CornerRadius {
-            top_left: radius as f32,
-            top_right: radius as f32,
+            top_left: if round_left { radius as f32 } else { 0. },
+            top_right: if round_right { radius as f32 } else { 0. },
             bottom_right: 0.,
             bottom_left: 0.,
         }
@@ -561,6 +720,8 @@ impl TitleTab {
             let w = (r * (std::f64::consts::SQRT_2 - 1.)).ceil() + 1.;
             let (from, to) = match fill {
                 Some(fill) => (fill, fill),
+                // Under a bar the window sits below the frame line, so match that.
+                None if is_bar && frame.frame_drawn => (frame.gradient.from, frame.gradient.to),
                 None => (gradient.from, gradient.to),
             };
             self.corner.update(
@@ -780,7 +941,7 @@ impl TitleTab {
             let tab_follows = row.is_some_and(|row| row.index + 1 < row.count);
             let fits =
                 self.rect.loc.x + width + r <= frame.frame_rect.loc.x + frame.frame_rect.size.w;
-            self.has_filled_join = r > 0. && !tab_follows && fits;
+            self.has_filled_join = r > 0. && !tab_follows && fits && !is_bar;
             self.fillet_radius = 0.;
             if self.has_filled_join {
                 self.use_shader = true;
@@ -827,7 +988,172 @@ impl TitleTab {
             );
             self.solid
                 .update(self.rect.size, gradient.from.to_array_premul());
+
+            // Bar style: stroke the top and sides in the frame color. The geometry reaches below
+            // the tab so the bottom edge is left to the frame.
+            if self.has_bar_outline {
+                self.use_shader = true;
+                let g = frame.gradient;
+                let w = bar_outline_w;
+                self.outline.update(
+                    self.rect.size,
+                    Rectangle::new(gradient_area.loc - self.rect.loc, gradient_area.size),
+                    g.in_,
+                    g.from,
+                    g.to,
+                    ((g.angle as f32) - 90.).to_radians(),
+                    Rectangle::from_size(self.rect.size + Size::from((0., w))),
+                    w as f32,
+                    corner_radius,
+                    scale as f32,
+                    alpha,
+                );
+            }
         }
+
+        // Bar style: the bar runs from the tab to the frame's right edge, down to the frame's top
+        // edge. In a tabbed column only the shown tile draws it, and the column moves its start
+        // past the last tab afterwards.
+        let has_bar = is_bar && row.is_none_or(|row| row.index == row.shown);
+        self.bar_params = has_bar.then(|| {
+            let fill = if is_active {
+                self.config.bar_color.unwrap_or_else(|| {
+                    let [r, g, b] = DEFAULT_BAR_COLOR;
+                    Color::from_rgba8_unpremul(r, g, b, 255)
+                })
+            } else {
+                inactive_bar_color
+            };
+            BarParams {
+                top: -outset,
+                bottom: frame.frame_rect.loc.y,
+                right: frame.frame_rect.loc.x + frame.frame_rect.size.w,
+                line_width: round(frame.line_width),
+                draw_line: frame.frame_drawn,
+                fill,
+                gradient: frame.gradient,
+                gradient_area,
+                radius,
+                scale,
+                alpha,
+                // Same size and inset as the close button, mirrored to the right end.
+                max_button: (self.config.maximize_button && can_maximize).then(|| {
+                    let size = round(self.config.close_button_size);
+                    let inset = round((height + outset - size) / 2.);
+                    // Thinner than the close button's outline so the arrowheads stay apart.
+                    let line = f64::max(1. / scale, round(size / 10.));
+                    (size, inset, -outset + inset, line)
+                }),
+                icon_color: contrasting_text_color(fill),
+            }
+        });
+        self.update_bar(self.rect.loc.x + width);
+
+        // The frame's top-right corner is squared off under the bar; fill the gap to the rounded
+        // window corner in the frame color, or the bar color when there is no frame.
+        let r = round(frame.window_radius);
+        self.has_corner_r = is_bar && r > 0.;
+        if self.has_corner_r {
+            let w = (r * (std::f64::consts::SQRT_2 - 1.)).ceil() + 1.;
+            let right = tile_width - frame.window_loc.x;
+            self.corner_r_loc = Point::from((right - r, frame.window_loc.y));
+            let g = if frame.frame_drawn {
+                frame.gradient
+            } else {
+                gradient
+            };
+            self.corner_r.update(
+                Size::from((r, r)),
+                Rectangle::new(gradient_area.loc - self.corner_r_loc, gradient_area.size),
+                g.in_,
+                g.from,
+                g.to,
+                ((g.angle as f32) - 90.).to_radians(),
+                Rectangle::new(
+                    Point::from((-(r + w), -w)),
+                    Size::from(((r + w) * 2., (r + w) * 2.)),
+                ),
+                w as f32,
+                CornerRadius {
+                    top_left: 0.,
+                    top_right: (r + w) as f32,
+                    bottom_right: 0.,
+                    bottom_left: 0.,
+                },
+                scale as f32,
+                alpha,
+            );
+        }
+    }
+
+    fn update_bar(&mut self, start_x: f64) {
+        self.has_bar = false;
+        let Some(bar) = self.bar_params else {
+            return;
+        };
+        let size = Size::from((bar.right - start_x, bar.bottom - bar.top));
+        if size.w <= 0. || size.h <= 0. {
+            return;
+        }
+        self.has_bar = true;
+        self.bar_rect = Rectangle::new(Point::from((start_x, bar.top)), size);
+
+        // Maximize button, only when the bar has room for it with the inset on both sides.
+        self.has_bar_max = false;
+        if let Some((btn, inset, top, _)) = bar.max_button {
+            if size.w >= btn + inset * 2. {
+                self.has_bar_max = true;
+                self.bar_max_rect = Rectangle::new(
+                    Point::from((bar.right - inset - btn, top))
+                        .to_physical_precise_round(bar.scale)
+                        .to_logical(bar.scale),
+                    Size::from((btn, btn)),
+                );
+            }
+        }
+
+        // The left edge meets the tab and the bottom edge is the frame's top edge, so the geometry
+        // reaches past both and only the top and right edges get stroked.
+        let w = if bar.draw_line { bar.line_width } else { 0. };
+        let geometry = Rectangle::new(Point::from((-w, 0.)), Size::from((size.w + w, size.h + w)));
+        let corner_radius = CornerRadius {
+            top_left: 0.,
+            top_right: bar.radius as f32,
+            bottom_right: 0.,
+            bottom_left: 0.,
+        }
+        .fit_to(geometry.size.w as f32, geometry.size.h as f32);
+
+        let g = bar.gradient;
+        self.bar_line.update(
+            size,
+            Rectangle::new(
+                bar.gradient_area.loc - self.bar_rect.loc,
+                bar.gradient_area.size,
+            ),
+            g.in_,
+            g.from,
+            g.to,
+            ((g.angle as f32) - 90.).to_radians(),
+            geometry,
+            w as f32,
+            corner_radius,
+            bar.scale as f32,
+            bar.alpha,
+        );
+        self.bar_fill.update(
+            size,
+            Rectangle::from_size(size),
+            GradientInterpolation::default(),
+            bar.fill,
+            bar.fill,
+            0.,
+            geometry,
+            0.,
+            corner_radius,
+            bar.scale as f32,
+            bar.alpha,
+        );
     }
 
     pub fn render(
@@ -843,6 +1169,17 @@ impl TitleTab {
 
         // Text and close button go on top.
         if self.config.close_button && self.close_rect.size.w > 0. {
+            for (loc, buffer) in &self.close_grid {
+                push(
+                    SolidColorRenderElement::from_buffer(
+                        buffer,
+                        location + *loc,
+                        self.alpha,
+                        Kind::Unspecified,
+                    )
+                    .into(),
+                );
+            }
             push(
                 self.close_button
                     .clone()
@@ -883,6 +1220,34 @@ impl TitleTab {
         }
 
         let has_shader = BorderRenderElement::has_shader(renderer);
+        if self.has_bar && self.has_bar_max {
+            if let Some(buffer) = self.bar_max_texture(renderer.as_gles_renderer()) {
+                let elem = TextureRenderElement::from_texture_buffer(
+                    buffer,
+                    location + self.bar_max_rect.loc,
+                    self.alpha,
+                    None,
+                    None,
+                    Kind::Unspecified,
+                );
+                push(PrimaryGpuTextureRenderElement(elem).into());
+            }
+        }
+        if self.has_bar && has_shader {
+            let loc = location + self.bar_rect.loc;
+            if self.bar_params.is_some_and(|bar| bar.draw_line) {
+                push(self.bar_line.clone().with_location(loc).into());
+            }
+            push(self.bar_fill.clone().with_location(loc).into());
+        }
+        if with_corner && self.has_corner_r && has_shader {
+            push(
+                self.corner_r
+                    .clone()
+                    .with_location(location + self.corner_r_loc)
+                    .into(),
+            );
+        }
         if !with_corner && self.has_skirt && has_shader {
             push(
                 self.skirt
@@ -929,6 +1294,14 @@ impl TitleTab {
                         .into(),
                 );
             }
+            if self.has_bar_outline {
+                push(
+                    self.outline
+                        .clone()
+                        .with_location(location + self.rect.loc)
+                        .into(),
+                );
+            }
             push(
                 self.background
                     .clone()
@@ -969,6 +1342,40 @@ impl TitleTab {
                 .into(),
             );
         }
+    }
+
+    fn bar_max_texture(&self, renderer: &mut GlesRenderer) -> Option<TextureBuffer<GlesTexture>> {
+        let bar = self.bar_params?;
+        let (btn, _, _, line) = bar.max_button?;
+        let size = (btn * bar.scale).round() as i32;
+        let line = (line * bar.scale).round() as i32;
+        if size <= 0 {
+            return None;
+        }
+
+        let mut cache = self.bar_max_icon.borrow_mut();
+        if let Some(entry) = &*cache {
+            if entry.size == size && entry.line == line && entry.color == bar.icon_color {
+                return Some(entry.buffer.clone());
+            }
+        }
+
+        let buffer = match generate_maximize_icon(renderer, size, line, bar.icon_color, bar.scale) {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                warn!("error generating maximize icon texture: {err:?}");
+                return None;
+            }
+        };
+
+        *cache = Some(IconTexture {
+            size,
+            line,
+            color: bar.icon_color,
+            buffer: buffer.clone(),
+        });
+
+        Some(buffer)
     }
 
     fn text_texture(&self, renderer: &mut GlesRenderer) -> Option<TextureBuffer<GlesTexture>> {
@@ -1057,6 +1464,70 @@ fn measure_text(font: &str, title: &str, scale: f64) -> anyhow::Result<Size<i32,
     let layout = make_layout(&cr, font, title, scale, None);
     let (width, height) = layout.pixel_size();
     Ok(Size::from((width, height)))
+}
+
+/// Draws the bar style's maximize icon: an X whose four ends are arrowheads pointing out to the
+/// corners.
+fn generate_maximize_icon(
+    renderer: &mut GlesRenderer,
+    size: i32,
+    line: i32,
+    color: Color,
+    scale: f64,
+) -> anyhow::Result<TextureBuffer<GlesTexture>> {
+    let surface = ImageSurface::create(cairo::Format::ARgb32, size, size)?;
+    let cr = cairo::Context::new(&surface)?;
+    cr.set_source_rgba(
+        f64::from(color.r),
+        f64::from(color.g),
+        f64::from(color.b),
+        f64::from(color.a),
+    );
+    let s = f64::from(size);
+    let w = f64::from(line);
+    cr.set_line_width(w);
+    cr.set_line_cap(cairo::LineCap::Butt);
+    cr.set_line_join(cairo::LineJoin::Miter);
+
+    // Corner points sit half a line in so the arrowheads' outer edges touch the box.
+    let a = w / 2.;
+    let b = s - w / 2.;
+    let head = (s * 0.3).round();
+
+    // The two diagonals.
+    cr.move_to(a, a);
+    cr.line_to(b, b);
+    cr.move_to(b, a);
+    cr.line_to(a, b);
+    cr.stroke()?;
+
+    // Arrowheads: an L in each corner.
+    for (x, y, dx, dy) in [
+        (a, a, 1., 1.),
+        (b, a, -1., 1.),
+        (a, b, 1., -1.),
+        (b, b, -1., -1.),
+    ] {
+        cr.move_to(x, y + dy * head);
+        cr.line_to(x, y);
+        cr.line_to(x + dx * head, y);
+        cr.stroke()?;
+    }
+
+    drop(cr);
+    let data = surface.take_data().unwrap();
+    let buffer = TextureBuffer::from_memory(
+        renderer,
+        &data,
+        Fourcc::Argb8888,
+        (size, size),
+        false,
+        scale,
+        Transform::Normal,
+        Vec::new(),
+    )?;
+
+    Ok(buffer)
 }
 
 fn generate_text_texture(

@@ -4145,6 +4145,7 @@ impl<W: LayoutElement> Column<W> {
         let count = self.tiles.len();
         let (frame_outset, frame_radius) = self.tiles[active_idx].frame_corner(focus_ring);
         let mut next_x = 0.;
+        let mut row_end = 0.;
         for (tile_idx, (tile, tile_off)) in self.tiles_mut().enumerate() {
             let is_active = is_active && tile_idx == active_idx;
             let focus_ring = focus_ring && tile_idx == active_idx;
@@ -4166,7 +4167,13 @@ impl<W: LayoutElement> Column<W> {
 
             if title_tab_row {
                 next_x = tile.title_tab().row_next_x();
+                row_end = tile.title_tab().right_x();
             }
+        }
+
+        // The shown tile draws the title bar, which starts after the last tab in the row.
+        if title_tab_row {
+            self.tiles[active_idx].set_title_tab_bar_start(row_end);
         }
 
         let config = self.tab_indicator.config();
