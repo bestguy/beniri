@@ -629,10 +629,20 @@ impl<W: LayoutElement> Tile<W> {
             self.corner_radius()
                 .scaled_by(1. - expanded_progress as f32)
         };
+        // A bar-style title bar spans the full width, so the shadow covers it too.
+        // Its top corners then follow the bar's rounded corners.
+        let mut shadow_size = frame_size;
+        let mut shadow_radius = radius;
+        if self.shadow_covers_tab() {
+            shadow_size.h += tab_height;
+            let bar_radius = self.title_tab.outer_radius() as f32;
+            shadow_radius.top_left = bar_radius;
+            shadow_radius.top_right = bar_radius;
+        }
         self.shadow.update_render_elements(
-            frame_size,
+            shadow_size,
             is_active,
-            radius,
+            shadow_radius,
             self.scale,
             1. - expanded_progress as f32,
         );
@@ -877,6 +887,11 @@ impl<W: LayoutElement> Tile<W> {
         }
 
         Some(self.title_tab.height())
+    }
+
+    /// Whether the shadow is cast by the title bar as well as the window, for the bar style.
+    fn shadow_covers_tab(&self) -> bool {
+        self.visual_tab_height().is_some() && self.title_tab.config().style == TitleTabStyle::Bar
     }
 
     /// The window's own corner radius. Under a bar-style title tab the top corners are square.
@@ -1549,8 +1564,13 @@ impl<W: LayoutElement> Tile<W> {
         }
 
         if expanded_progress < 1. {
+            let shadow_location = if self.shadow_covers_tab() {
+                location
+            } else {
+                frame_location
+            };
             self.shadow
-                .render(ctx.renderer, frame_location, &mut |elem| push(elem.into()));
+                .render(ctx.renderer, shadow_location, &mut |elem| push(elem.into()));
         }
 
         let surface_anim_scale = animated_window_size / window_size;

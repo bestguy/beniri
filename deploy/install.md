@@ -44,6 +44,10 @@ No root is needed. It assumes:
 
        ~/.local/bin/beniri --session -c ~/.config/niri/config-beniri.kdl
 
+   To use a different config, pass it as the argument, for example
+   `deploy/install.sh ~/.config/niri/config-towns.kdl`. Running the script
+   again with another config switches the session to it.
+
 4. Log out and in. The session now runs the fork.
 
 The packaged `niri msg` CLI keeps working against the fork because the IPC is

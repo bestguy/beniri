@@ -59,6 +59,8 @@ pub struct TitleTab {
     show_maximize: bool,
     /// Tab background rectangle, relative to the tile origin.
     rect: Rectangle<f64, Logical>,
+    /// Radius of the tab's (and bar's) outer top corners.
+    outer_radius: f64,
     background: BorderRenderElement,
     /// Outline drawn in the frame color when a fill color is configured.
     outline: BorderRenderElement,
@@ -220,6 +222,7 @@ impl TitleTab {
             config,
             visible: false,
             rect: Rectangle::default(),
+            outer_radius: 0.,
             background: BorderRenderElement::default(),
             outline: BorderRenderElement::default(),
             fillet: BorderRenderElement::default(),
@@ -310,6 +313,11 @@ impl TitleTab {
     /// Tab background rectangle relative to the tile origin, valid after update_render_elements.
     pub fn rect(&self) -> Rectangle<f64, Logical> {
         self.rect
+    }
+
+    /// Radius of the outer top corners, valid after update_render_elements.
+    pub fn outer_radius(&self) -> f64 {
+        self.outer_radius
     }
 
     /// Returns whether the tab is drawn as an outline that should cut into the frame's top edge.
@@ -491,6 +499,7 @@ impl TitleTab {
 
         let natural_w = self.text_natural_size.w as f64 / scale;
         let radius = round(f64::from(frame.top_left_radius) * self.config.corner_radius_factor);
+        self.outer_radius = radius;
         // Close button: a square before the title, with a gap to the text.
         let button_w = if self.config.close_button {
             round(self.config.close_button_size)

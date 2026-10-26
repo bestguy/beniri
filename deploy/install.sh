@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Install BeNiri for the current user and point the niri systemd
 # user session at it. No root needed. Takes effect at the next login.
+#
+# Usage: install.sh [config]   (default: ~/.config/niri/config-beniri.kdl)
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 bin="$HOME/.local/bin/beniri"
-cfg="$HOME/.config/niri/config-beniri.kdl"
+cfg="$(realpath -m "${1:-$HOME/.config/niri/config-beniri.kdl}")"
 dropin_dir="$HOME/.config/systemd/user/niri.service.d"
 
 [ -x "$repo/target/release/niri" ] || { echo "build first: cargo build --release -p niri"; exit 1; }
