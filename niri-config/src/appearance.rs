@@ -1363,6 +1363,17 @@ pub enum TitleTabStyle {
     Outline,
     /// Filled tab followed by a title bar that runs to the frame's right edge, FM TOWNS style.
     Bar,
+    /// Full-width white title bar with the title centered between a close box and a zoom box,
+    /// striped while the window is active, classic Macintosh style.
+    Mac,
+}
+
+impl TitleTabStyle {
+    /// Whether the title strip runs across the whole window like a title bar, squaring off the
+    /// window's top corners under it.
+    pub fn is_title_bar(self) -> bool {
+        matches!(self, Self::Bar | Self::Mac)
+    }
 }
 
 /// BeOS-style title tab drawn by the compositor above the top-left of each window.

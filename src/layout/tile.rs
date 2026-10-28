@@ -2,7 +2,7 @@ use core::f64;
 use std::rc::Rc;
 
 use niri_config::utils::MergeWith as _;
-use niri_config::{Color, CornerRadius, Gradient, GradientInterpolation, TitleTabStyle};
+use niri_config::{Color, CornerRadius, Gradient, GradientInterpolation};
 use niri_ipc::WindowLayout;
 use smithay::backend::renderer::element::{Element, Kind};
 use smithay::backend::renderer::gles::GlesRenderer;
@@ -891,13 +891,13 @@ impl<W: LayoutElement> Tile<W> {
 
     /// Whether the shadow is cast by the title bar as well as the window, for the bar style.
     fn shadow_covers_tab(&self) -> bool {
-        self.visual_tab_height().is_some() && self.title_tab.config().style == TitleTabStyle::Bar
+        self.visual_tab_height().is_some() && self.title_tab.config().style.is_title_bar()
     }
 
     /// The window's own corner radius. Under a bar-style title tab the top corners are square.
     fn window_radius(&self) -> CornerRadius {
         let mut radius = self.window.geometry_corner_radius();
-        if !self.title_tab.is_off() && self.title_tab.config().style == TitleTabStyle::Bar {
+        if !self.title_tab.is_off() && self.title_tab.config().style.is_title_bar() {
             radius.top_left = 0.;
             radius.top_right = 0.;
         }

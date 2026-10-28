@@ -34,6 +34,10 @@ const MAX_TEXTURE_SIZE: i32 = 16383;
 const DEFAULT_BAR_COLOR: [u8; 3] = [224, 224, 224];
 const DEFAULT_INACTIVE_BAR_COLOR: [u8; 3] = [200, 200, 200];
 
+/// Mac style defaults: a white bar, and five stripes across it while the window is active.
+const DEFAULT_MAC_COLOR: [u8; 3] = [255, 255, 255];
+const MAC_STRIPES: i32 = 5;
+
 /// Placement of a tab within a row of tabs (tabbed columns).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabRow {
@@ -119,6 +123,11 @@ pub struct TitleTab {
     max_front_loc: Point<f64, Logical>,
     /// Bar style: grid lines inside the close button, relative to the tile origin.
     close_grid: Vec<(Point<f64, Logical>, SolidColorBuffer)>,
+    /// Mac style: stripe segments across the active bar, relative to the tile origin.
+    stripes: Vec<(Point<f64, Logical>, SolidColorBuffer)>,
+    /// Mac style: the boxes only show, and only hit, on the active window.
+    mac: bool,
+    is_active: bool,
     /// Maximum text width in physical pixels; longer titles get ellipsized.
     text_max_width: i32,
     /// Measured natural text size in physical pixels.
@@ -258,6 +267,9 @@ impl TitleTab {
             close_rect: Rectangle::default(),
             close_button: BorderRenderElement::default(),
             close_grid: Vec::new(),
+            stripes: Vec::new(),
+            mac: false,
+            is_active: false,
             max_rect: Rectangle::default(),
             max_back: BorderRenderElement::default(),
             max_front: BorderRenderElement::default(),
@@ -401,7 +413,8 @@ impl TitleTab {
             return Some(TitleTabHit::Body);
         }
 
-        if self.config.close_button && with_slack(self.close_rect).contains(point) {
+        let boxes = !self.mac || self.is_active;
+        if boxes && self.config.close_button && with_slack(self.close_rect).contains(point) {
             Some(TitleTabHit::Close)
         } else if self.show_maximize && with_slack(self.max_rect).contains(point) {
             Some(TitleTabHit::Maximize)
@@ -426,7 +439,12 @@ impl TitleTab {
     ) {
         self.visible = visible;
         let is_bar = self.config.style == TitleTabStyle::Bar;
-        self.show_maximize = self.config.maximize_button && can_maximize && !is_bar;
+        let is_mac = self.config.style == TitleTabStyle::Mac;
+        self.mac = is_mac;
+        self.is_active = is_active;
+        // Mac style: the boxes only show on the active window.
+        self.show_maximize =
+            self.config.maximize_button && can_maximize && !is_bar && (!is_mac || is_active);
         self.alpha = alpha;
         if !visible {
             return;
@@ -461,7 +479,14 @@ impl TitleTab {
         };
         let gradient = gradient
             .or_else(|| color.map(Gradient::from))
-            .unwrap_or(frame.gradient);
+            .unwrap_or_else(|| {
+                if is_mac {
+                    let [r, g, b] = DEFAULT_MAC_COLOR;
+                    Gradient::from(Color::from_rgba8_unpremul(r, g, b, 255))
+                } else {
+                    frame.gradient
+                }
+            });
 
         let text_color = if is_urgent {
             self.config.urgent_text_color
@@ -476,7 +501,7 @@ impl TitleTab {
                     .fill_color
                     .unwrap_or_else(|| Color::from_rgba8_unpremul(24, 24, 24, 255)),
             ),
-            TitleTabStyle::Filled | TitleTabStyle::Bar => None,
+            TitleTabStyle::Filled | TitleTabStyle::Bar | TitleTabStyle::Mac => None,
         };
         self.has_fill = fill.is_some();
         // Like the focus ring, the outline only appears on tiles that have a frame.
@@ -487,6 +512,8 @@ impl TitleTab {
             // Solid enough fill: contrast against it. Transparent fill: use the frame color.
             Some(fill) if fill.a >= 0.5 => contrasting_text_color(fill),
             Some(_) => gradient.from,
+            // Mac bar: title, stripes and boxes are all drawn in the frame line's color.
+            None if is_mac && frame.frame_drawn => frame.gradient.from,
             None => contrasting_text_color(gradient.from),
         });
 
@@ -537,13 +564,17 @@ impl TitleTab {
         let join_r = round(f64::from(frame.top_left_radius) * self.config.join_radius_factor);
         // Bar-style tabs sit side by side like segments of one bar, overlapping by the outline
         // width so neighbors share one line.
-        self.has_bar_outline = is_bar && frame.frame_drawn;
+        self.has_bar_outline = (is_bar || is_mac) && frame.frame_drawn;
         let bar_outline_w = if self.has_bar_outline {
             round(frame.line_width)
         } else {
             0.
         };
-        let default_gap = if is_bar { -bar_outline_w } else { join_r };
+        let default_gap = if is_bar || is_mac {
+            -bar_outline_w
+        } else {
+            join_r
+        };
         self.row_gap = round(self.config.row_gap.unwrap_or(default_gap));
 
         // The first tab in a row sits flush on the frame's top-left corner like a lone tab does,
@@ -568,7 +599,14 @@ impl TitleTab {
             max_w = f64::min(max_w, round(share));
         }
         let max_w = f64::max(min_w, max_w);
-        let width = (natural_w + lead + trail + left_outset).clamp(min_w, max_w);
+        let frame_right = frame.frame_rect.loc.x + frame.frame_rect.size.w;
+        let width = if is_mac {
+            // The bar runs to the frame's right edge. In a row the tabs share that width.
+            let count = row.map_or(1., |row| row.count.max(1) as f64);
+            round((frame_right + left_outset - self.row_gap * (count - 1.)) / count)
+        } else {
+            (natural_w + lead + trail + left_outset).clamp(min_w, max_w)
+        };
         let width = round(width);
 
         self.rect = Rectangle::new(
@@ -607,11 +645,108 @@ impl TitleTab {
             Size::from((max_w_btn, max_w_btn)),
         );
 
+        // Mac style: close box and zoom box are centered below the top line, one box width in
+        // from the sides; the title is centered between them (the box room is reserved either
+        // way so it doesn't move with focus); stripes as thick as the gaps between them fill the
+        // rest while active, sized so a margin of one stripe fits above and below the block.
+        let box_w = round(self.config.close_button_size);
+        let inner_h = self.rect.size.h - bar_outline_w;
+        let box_top = round((inner_h - box_w) / 2.);
+        let box_inset = bar_outline_w + box_top;
+        let box_side = bar_outline_w + box_w;
+        let stripe = f64::max(
+            1.,
+            ((inner_h * scale) / (MAC_STRIPES as f64 * 2. + 1.)).floor(),
+        ) / scale;
+        let mut text_w = 0.;
+        if is_mac {
+            let has_box = self.config.close_button || (self.config.maximize_button && can_maximize);
+            let side = if has_box {
+                box_side + box_w + box_top
+            } else {
+                padding
+            };
+            let avail_w = f64::max(0., width - (side + padding) * 2.);
+            self.text_max_width = (avail_w * scale).floor().max(0.) as i32;
+            text_w = f64::min(natural_w, avail_w);
+            self.text_loc = Point::from((
+                self.rect.loc.x + round((width - text_w) / 2.),
+                self.text_loc.y,
+            ))
+            .to_physical_precise_round(scale)
+            .to_logical(scale);
+
+            self.close_rect = Rectangle::new(
+                Point::from((
+                    self.rect.loc.x + left_outset + box_side,
+                    self.rect.loc.y + box_inset,
+                ))
+                .to_physical_precise_round(scale)
+                .to_logical(scale),
+                Size::from((button_w, button_w)),
+            );
+            self.max_rect = Rectangle::new(
+                Point::from((
+                    self.rect.loc.x + width - box_side - max_w_btn,
+                    self.rect.loc.y + box_inset,
+                ))
+                .to_physical_precise_round(scale)
+                .to_logical(scale),
+                Size::from((max_w_btn, max_w_btn)),
+            );
+        }
+
+        self.stripes.clear();
+        if is_mac && is_active {
+            // The stripes keep the same distance from the sides as the first one keeps from
+            // the top.
+            let block_h = stripe * (MAC_STRIPES as f64 * 2. - 1.);
+            let margin = round((inner_h - block_h) / 2.);
+            let inner_left = self.rect.loc.x + bar_outline_w + margin;
+            let inner_right = self.rect.loc.x + width - bar_outline_w - margin;
+            // Spans the stripes stay out of: a stripe's width around each box, the padding
+            // around the title.
+            let mut holes: Vec<(f64, f64)> = Vec::new();
+            if self.config.close_button {
+                let r = self.close_rect;
+                holes.push((r.loc.x - stripe, r.loc.x + r.size.w + stripe));
+            }
+            if text_w > 0. && !self.title.is_empty() {
+                let x = self.text_loc.x;
+                holes.push((x - padding, x + text_w + padding));
+            }
+            if self.show_maximize {
+                let r = self.max_rect;
+                holes.push((r.loc.x - stripe, r.loc.x + r.size.w + stripe));
+            }
+            holes.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+            let top = self.rect.loc.y + bar_outline_w + margin;
+            let color = self.text_color.to_array_premul();
+            let mut x = inner_left;
+            for (start, end) in holes.into_iter().chain([(inner_right, inner_right)]) {
+                let start = round(f64::min(start, inner_right));
+                if start - x >= stripe {
+                    let len = start - x;
+                    for i in 0..MAC_STRIPES {
+                        let y = top + f64::from(i) * stripe * 2.;
+                        let buffer = SolidColorBuffer::new((len, stripe), color);
+                        self.stripes.push((Point::from((x, y)), buffer));
+                    }
+                }
+                x = f64::max(x, round(end));
+            }
+        }
+
         // Close button: an outlined square in the text color.
         // The bar style uses a thinner stroke, matching its maximize icon.
         let close_line_div = if is_bar { 10. } else { 8. };
         if self.config.close_button {
-            let line = f64::max(1. / scale, round(button_w / close_line_div));
+            let line = if is_mac {
+                stripe
+            } else {
+                f64::max(1. / scale, round(button_w / close_line_div))
+            };
             self.close_button.update(
                 self.close_rect.size,
                 Rectangle::from_size(self.close_rect.size),
@@ -670,6 +805,12 @@ impl TitleTab {
             let back = round(s * 0.72);
             let front = round(s * 0.58);
             // Big square at the bottom-right, small one in front at the top-left, as on BeOS.
+            // Mac zoom box: the full square with a smaller one sharing its top-left corner.
+            let (line, back, front) = if is_mac {
+                (stripe, s, round(s * 0.64))
+            } else {
+                (line, back, front)
+            };
             self.max_back_loc = self.max_rect.loc + Point::from((s - back, s - back));
             self.max_front_loc = self.max_rect.loc;
             let square = |elem: &mut BorderRenderElement, size: f64, color: Color, bw: f64| {
@@ -697,7 +838,7 @@ impl TitleTab {
         // Background. Only the top corners are rounded: the bottom merges into the frame.
         // Bar-style tabs are segments of one bar, so only its outer corners are rounded: the
         // first tab's top-left, and the last tab's top-right when no bar is left after it.
-        let (round_left, round_right) = if is_bar {
+        let (round_left, round_right) = if is_bar || is_mac {
             let last_in_row = row.is_none_or(|row| row.index + 1 == row.count);
             let frame_right = frame.frame_rect.loc.x + frame.frame_rect.size.w;
             (first_in_row, last_in_row && x0 + width >= frame_right)
@@ -950,7 +1091,7 @@ impl TitleTab {
             let tab_follows = row.is_some_and(|row| row.index + 1 < row.count);
             let fits =
                 self.rect.loc.x + width + r <= frame.frame_rect.loc.x + frame.frame_rect.size.w;
-            self.has_filled_join = r > 0. && !tab_follows && fits && !is_bar;
+            self.has_filled_join = r > 0. && !tab_follows && fits && !is_bar && !is_mac;
             self.fillet_radius = 0.;
             if self.has_filled_join {
                 self.use_shader = true;
@@ -1176,8 +1317,9 @@ impl TitleTab {
             return;
         }
 
-        // Text and close button go on top.
-        if self.config.close_button && self.close_rect.size.w > 0. {
+        // Text and close button go on top. An inactive Mac bar shows no boxes.
+        let show_close = self.config.close_button && (!self.mac || self.is_active);
+        if show_close && self.close_rect.size.w > 0. {
             for (loc, buffer) in &self.close_grid {
                 push(
                     SolidColorRenderElement::from_buffer(
@@ -1203,12 +1345,14 @@ impl TitleTab {
                     .with_location(location + self.max_front_loc)
                     .into(),
             );
-            push(
-                self.max_front_fill
-                    .clone()
-                    .with_location(location + self.max_front_loc)
-                    .into(),
-            );
+            if !self.mac {
+                push(
+                    self.max_front_fill
+                        .clone()
+                        .with_location(location + self.max_front_loc)
+                        .into(),
+                );
+            }
             push(
                 self.max_back
                     .clone()
@@ -1226,6 +1370,17 @@ impl TitleTab {
                 Kind::Unspecified,
             );
             push(PrimaryGpuTextureRenderElement(elem).into());
+        }
+        for (loc, buffer) in &self.stripes {
+            push(
+                SolidColorRenderElement::from_buffer(
+                    buffer,
+                    location + *loc,
+                    self.alpha,
+                    Kind::Unspecified,
+                )
+                .into(),
+            );
         }
 
         let has_shader = BorderRenderElement::has_shader(renderer);
