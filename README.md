@@ -1,10 +1,24 @@
 # BeNiri
 
-**This is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.** It can also be styled as an FM TOWNS or classic Macintosh title bar.
+**This is a fork of [niri](https://github.com/niri-wm/niri) with support for retro OS window decorations:**
 
-### What the tab does:
+* BeOS-style title tab
+* Classic Macintosh title bar
+* FM TownsOS title bar 
 
-It shows the window title, click to focus, drag to move, a close button before the title and a maximize (zoom) button after it.
+### Why?
+
+I **loved** the look of BeOS and other retro GUIs back in the day.  I can't use these old OSes for my day to day computing, but I thought it would be fun to use them with Niri.
+
+I respect that Niri deliberately draws no window decorations, but I personally think this looks cool and find it fun and handy enough that I daily-drive this.
+
+So, this lives here as a fork rather than as an upstream pull request. I'm grateful to the niri authors for the compositor! **Please report anything unrelated to the title tab upstream**, and title-tab issues here.
+
+## Options
+
+### BeOS
+
+The default: a title tab above the top-left corner of each window. It shows the window title, click to focus, drag to move, a close button before the title and a maximize (zoom) button after it.
 
 <img width="393" alt="A window with a yellow BeOS-style title tab showing a close button, the title and a maximize button" src="docs/wiki/img/title-tab/main.png">
 
@@ -16,13 +30,52 @@ It also changes tabbed columns to show a row of tabs instead of niri's side indi
 
 <img width="702" alt="The same tabbed column with the third tab focused" src="docs/wiki/img/title-tab/tab3.png">
 
-### Why?
+The tab comes filled in the frame color, or can be configured as an outline joined to the focus ring (`style "outline"`).
 
-I **loved** the look of BeOS back in the day.
+<img width="688" alt="The outline style: the focused tab drawn as an outline joined to the focus ring" src="docs/wiki/img/title-tab/border.png">
 
-I respect that Niri deliberately draws no window decorations, but I personally think this looks cool and find it fun and handy enough that I daily-drive this.
+### Classic Macintosh
 
-So, this lives here as a fork rather than as an upstream pull request. I'm grateful to the niri authors for the compositor! **Please report anything unrelated to the title tab upstream**, and title-tab issues here.
+`style "mac"` is a classic Macintosh title bar: white, with the title centered between a close box and a zoom box, and stripes across it while the window is focused.
+
+<img width="778" alt="A focused terminal with a classic Macintosh title bar: black stripes across white, a close box on the left, the centered title and a zoom box on the right" src="docs/wiki/img/title-tab/mac.png">
+
+In a tabbed column the bar is split between the windows, with stripes and boxes only on the focused one.
+
+<img width="778" alt="A tabbed column of three windows as segments of one Macintosh title bar, with the first segment striped and focused" src="docs/wiki/img/title-tab/mac-tabs.png">
+
+The bar takes its lines from the focus ring, so the classic black-on-white look is a black `active-color`:
+
+```kdl
+layout {
+    focus-ring {
+        active-color "#000000"
+    }
+    title-tab {
+        style "mac"
+    }
+}
+```
+
+### TownsOS
+
+*(Q: Wut?  A: The FM Towns was a line of Fujitsu PCs from the late 80s and early 90s, and Towns OS was its operating system.)*
+
+`style "towns"` is a Towns OS-style title bar: the tab is followed by a bar across the window, with a gridded close box and a maximize button at the far right. Unfocused windows get a plain gray bar.
+
+<img width="837" alt="A focused settings window with a Towns OS title bar: a white tab with a gridded close box and the title, then a light blue bar ending in a maximize button, above an unfocused window with a plain bar" src="docs/wiki/img/title-tab/towns.png">
+
+In a tabbed column the tabs sit side by side at the start of the bar.
+
+<img width="854" alt="A tabbed column with two Towns OS tabs, Settings and Downloads, followed by the bar" src="docs/wiki/img/title-tab/towns-tabs.png">
+
+```kdl
+layout {
+    title-tab {
+        style "towns"
+    }
+}
+```
 
 ## Using
 
@@ -40,29 +93,7 @@ layout {
 
 The only other changed default is the accent: the focus ring's active color is BeOS yellow (`#ffcb00`) instead of niri's light blue, so the tab, which takes its color from the focus ring, looks right out of the box. Your own `active-color` or theming tool overrides it as usual.
 
-The tab comes filled in the frame color, or can be configured as an outline joined to the focus ring (`style "outline"`).
-
-<img width="688" alt="The outline style: the focused tab drawn as an outline joined to the focus ring" src="docs/wiki/img/title-tab/border.png">
-
-### Other styles
-
-The same binary draws two more looks. Pick one with the `style` option; it changes live, like any other config edit.
-
-`style "towns"` is an FM TOWNS-style title bar: the tab is followed by a bar across the window, with a gridded close box and a maximize button at the far right.
-
-<!-- TODO: screenshot of the towns style -->
-
-`style "mac"` is a classic Macintosh title bar: white, with the title centered between a close box and a zoom box, and stripes across it while the window is focused.
-
-<!-- TODO: screenshot of the mac style -->
-
-```kdl
-layout {
-    title-tab {
-        style "mac"
-    }
-}
-```
+All three styles are in the one binary. `style` is an ordinary config setting, so switching takes effect live without a rebuild or re-login.
 
 See [Configuration: Title Tab](docs/wiki/Configuration:-Title-Tab.md) for every option, and [deploy/install.md](deploy/install.md) for running the fork alongside stock niri.
 
