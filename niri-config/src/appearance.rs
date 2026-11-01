@@ -1362,7 +1362,7 @@ pub enum TitleTabStyle {
     /// Frame-colored outline around a `fill-color` interior, joined to the frame.
     Outline,
     /// Filled tab followed by a title bar that runs to the frame's right edge, FM TOWNS style.
-    Bar,
+    Towns,
     /// Full-width white title bar with the title centered between a close box and a zoom box,
     /// striped while the window is active, classic Macintosh style.
     Mac,
@@ -1372,7 +1372,7 @@ impl TitleTabStyle {
     /// Whether the title strip runs across the whole window like a title bar, squaring off the
     /// window's top corners under it.
     pub fn is_title_bar(self) -> bool {
-        matches!(self, Self::Bar | Self::Mac)
+        matches!(self, Self::Towns | Self::Mac)
     }
 }
 
@@ -1398,9 +1398,9 @@ pub struct TitleTab {
     /// Interior color for the outline style. A transparent fill shows the wallpaper through the
     /// tab. Defaults to a dark gray.
     pub fill_color: Option<Color>,
-    /// Bar style: interior of the bar right of the active tab. Defaults to a light gray.
+    /// Towns style: interior of the bar right of the active tab. Defaults to a light gray.
     pub bar_color: Option<Color>,
-    /// Bar style: fill of the whole bar, tab included, on inactive windows.
+    /// Towns style: fill of the whole bar, tab included, on inactive windows.
     pub inactive_bar_color: Option<Color>,
     /// Whether to draw a close button before the title.
     pub close_button: bool,

@@ -30,7 +30,7 @@ use crate::utils::to_physical_precise_round;
 /// Largest texture dimension we'll ask the GPU for.
 const MAX_TEXTURE_SIZE: i32 = 16383;
 
-/// Bar style defaults for `bar-color` and `inactive-bar-color`.
+/// Towns style defaults for `bar-color` and `inactive-bar-color`.
 const DEFAULT_BAR_COLOR: [u8; 3] = [224, 224, 224];
 const DEFAULT_INACTIVE_BAR_COLOR: [u8; 3] = [200, 200, 200];
 
@@ -102,7 +102,8 @@ pub struct TitleTab {
     has_fill: bool,
     /// Whether to draw the outline (only when the tile has a frame to join).
     draw_outline: bool,
-    /// Bar style: the tab's top and sides are stroked in the frame color (reuses `outline`).
+    /// Towns and Mac styles: the tab's top and sides are stroked in the frame color (reuses
+    /// `outline`).
     has_bar_outline: bool,
     solid: SolidColorBuffer,
     use_shader: bool,
@@ -121,7 +122,7 @@ pub struct TitleTab {
     max_front_fill: BorderRenderElement,
     max_back_loc: Point<f64, Logical>,
     max_front_loc: Point<f64, Logical>,
-    /// Bar style: grid lines inside the close button, relative to the tile origin.
+    /// Towns style: grid lines inside the close button, relative to the tile origin.
     close_grid: Vec<(Point<f64, Logical>, SolidColorBuffer)>,
     /// Mac style: stripe segments across the active bar, relative to the tile origin.
     stripes: Vec<(Point<f64, Logical>, SolidColorBuffer)>,
@@ -134,7 +135,7 @@ pub struct TitleTab {
     text_natural_size: Size<i32, Physical>,
     title: String,
 
-    /// Bar style: what the title bar right of the tab needs, kept so a tabbed column can move its
+    /// Towns style: what the title bar right of the tab needs, kept so a tabbed column can move its
     /// start to the end of the row after all tabs are laid out. `None` when this tab has no bar.
     bar_params: Option<BarParams>,
     has_bar: bool,
@@ -438,13 +439,13 @@ impl TitleTab {
         alpha: f32,
     ) {
         self.visible = visible;
-        let is_bar = self.config.style == TitleTabStyle::Bar;
+        let is_towns = self.config.style == TitleTabStyle::Towns;
         let is_mac = self.config.style == TitleTabStyle::Mac;
         self.mac = is_mac;
         self.is_active = is_active;
         // Mac style: the boxes only show on the active window.
         self.show_maximize =
-            self.config.maximize_button && can_maximize && !is_bar && (!is_mac || is_active);
+            self.config.maximize_button && can_maximize && !is_towns && (!is_mac || is_active);
         self.alpha = alpha;
         if !visible {
             return;
@@ -468,7 +469,7 @@ impl TitleTab {
             (self.config.urgent_color, self.config.urgent_gradient)
         } else if is_active {
             (self.config.active_color, self.config.active_gradient)
-        } else if is_bar {
+        } else if is_towns {
             // An inactive bar is one color, tab included.
             (
                 Some(self.config.inactive_color.unwrap_or(inactive_bar_color)),
@@ -501,7 +502,7 @@ impl TitleTab {
                     .fill_color
                     .unwrap_or_else(|| Color::from_rgba8_unpremul(24, 24, 24, 255)),
             ),
-            TitleTabStyle::Filled | TitleTabStyle::Bar | TitleTabStyle::Mac => None,
+            TitleTabStyle::Filled | TitleTabStyle::Towns | TitleTabStyle::Mac => None,
         };
         self.has_fill = fill.is_some();
         // Like the focus ring, the outline only appears on tiles that have a frame.
@@ -562,15 +563,15 @@ impl TitleTab {
 
         // Bend and gap sizes are fixed per tab so a row lines up regardless of focus.
         let join_r = round(f64::from(frame.top_left_radius) * self.config.join_radius_factor);
-        // Bar-style tabs sit side by side like segments of one bar, overlapping by the outline
-        // width so neighbors share one line.
-        self.has_bar_outline = (is_bar || is_mac) && frame.frame_drawn;
+        // Towns- and Mac-style tabs sit side by side like segments of one bar, overlapping by the
+        // outline width so neighbors share one line.
+        self.has_bar_outline = (is_towns || is_mac) && frame.frame_drawn;
         let bar_outline_w = if self.has_bar_outline {
             round(frame.line_width)
         } else {
             0.
         };
-        let default_gap = if is_bar || is_mac {
+        let default_gap = if is_towns || is_mac {
             -bar_outline_w
         } else {
             join_r
@@ -739,8 +740,8 @@ impl TitleTab {
         }
 
         // Close button: an outlined square in the text color.
-        // The bar style uses a thinner stroke, matching its maximize icon.
-        let close_line_div = if is_bar { 10. } else { 8. };
+        // The Towns style uses a thinner stroke, matching its maximize icon.
+        let close_line_div = if is_towns { 10. } else { 8. };
         if self.config.close_button {
             let line = if is_mac {
                 stripe
@@ -762,11 +763,11 @@ impl TitleTab {
             );
         }
 
-        // Bar style: a 5x5 grid inside the close button, FM TOWNS style, or 3x3 when the cells
+        // Towns style: a 5x5 grid inside the close button, or 3x3 when the cells
         // would get too small. Inner lines match the outline; cells need two physical pixels,
         // and a grid whose cells come out even wins over one that doesn't.
         self.close_grid.clear();
-        if self.config.close_button && is_bar {
+        if self.config.close_button && is_towns {
             let size = (button_w * scale).round();
             let line = f64::max(1., (round(button_w / close_line_div) * scale).round());
             let inner = size - line * 2.;
@@ -836,9 +837,9 @@ impl TitleTab {
         }
 
         // Background. Only the top corners are rounded: the bottom merges into the frame.
-        // Bar-style tabs are segments of one bar, so only its outer corners are rounded: the
-        // first tab's top-left, and the last tab's top-right when no bar is left after it.
-        let (round_left, round_right) = if is_bar || is_mac {
+        // Towns- and Mac-style tabs are segments of one bar, so only its outer corners are rounded:
+        // the first tab's top-left, and the last tab's top-right when no bar is left after it.
+        let (round_left, round_right) = if is_towns || is_mac {
             let last_in_row = row.is_none_or(|row| row.index + 1 == row.count);
             let frame_right = frame.frame_rect.loc.x + frame.frame_rect.size.w;
             (first_in_row, last_in_row && x0 + width >= frame_right)
@@ -871,7 +872,7 @@ impl TitleTab {
             let (from, to) = match fill {
                 Some(fill) => (fill, fill),
                 // Under a bar the window sits below the frame line, so match that.
-                None if is_bar && frame.frame_drawn => (frame.gradient.from, frame.gradient.to),
+                None if is_towns && frame.frame_drawn => (frame.gradient.from, frame.gradient.to),
                 None => (gradient.from, gradient.to),
             };
             self.corner.update(
@@ -1091,7 +1092,7 @@ impl TitleTab {
             let tab_follows = row.is_some_and(|row| row.index + 1 < row.count);
             let fits =
                 self.rect.loc.x + width + r <= frame.frame_rect.loc.x + frame.frame_rect.size.w;
-            self.has_filled_join = r > 0. && !tab_follows && fits && !is_bar && !is_mac;
+            self.has_filled_join = r > 0. && !tab_follows && fits && !is_towns && !is_mac;
             self.fillet_radius = 0.;
             if self.has_filled_join {
                 self.use_shader = true;
@@ -1139,8 +1140,8 @@ impl TitleTab {
             self.solid
                 .update(self.rect.size, gradient.from.to_array_premul());
 
-            // Bar style: stroke the top and sides in the frame color. The geometry reaches below
-            // the tab so the bottom edge is left to the frame.
+            // Towns and Mac styles: stroke the top and sides in the frame color. The geometry
+            // reaches below the tab so the bottom edge is left to the frame.
             if self.has_bar_outline {
                 self.use_shader = true;
                 let g = frame.gradient;
@@ -1161,10 +1162,10 @@ impl TitleTab {
             }
         }
 
-        // Bar style: the bar runs from the tab to the frame's right edge, down to the frame's top
+        // Towns style: the bar runs from the tab to the frame's right edge, down to the frame's top
         // edge. In a tabbed column only the shown tile draws it, and the column moves its start
         // past the last tab afterwards.
-        let has_bar = is_bar && row.is_none_or(|row| row.index == row.shown);
+        let has_bar = is_towns && row.is_none_or(|row| row.index == row.shown);
         self.bar_params = has_bar.then(|| {
             let fill = if is_active {
                 self.config.bar_color.unwrap_or_else(|| {
@@ -1202,7 +1203,7 @@ impl TitleTab {
         // The frame's top-right corner is squared off under the bar; fill the gap to the rounded
         // window corner in the frame color, or the bar color when there is no frame.
         let r = round(frame.window_radius);
-        self.has_corner_r = is_bar && r > 0.;
+        self.has_corner_r = is_towns && r > 0.;
         if self.has_corner_r {
             let w = (r * (std::f64::consts::SQRT_2 - 1.)).ceil() + 1.;
             let right = tile_width - frame.window_loc.x;
@@ -1630,7 +1631,7 @@ fn measure_text(font: &str, title: &str, scale: f64) -> anyhow::Result<Size<i32,
     Ok(Size::from((width, height)))
 }
 
-/// Draws the bar style's maximize icon: an X whose four ends are arrowheads pointing out to the
+/// Draws the Towns style's maximize icon: an X whose four ends are arrowheads pointing out to the
 /// corners.
 fn generate_maximize_icon(
     renderer: &mut GlesRenderer,

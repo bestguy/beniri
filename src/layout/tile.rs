@@ -629,7 +629,7 @@ impl<W: LayoutElement> Tile<W> {
             self.corner_radius()
                 .scaled_by(1. - expanded_progress as f32)
         };
-        // A bar-style title bar spans the full width, so the shadow covers it too.
+        // A Towns or Mac title bar spans the full width, so the shadow covers it too.
         // Its top corners then follow the bar's rounded corners.
         let mut shadow_size = frame_size;
         let mut shadow_radius = radius;
@@ -889,12 +889,13 @@ impl<W: LayoutElement> Tile<W> {
         Some(self.title_tab.height())
     }
 
-    /// Whether the shadow is cast by the title bar as well as the window, for the bar style.
+    /// Whether the shadow is cast by the title bar as well as the window, for the Towns and Mac
+    /// styles.
     fn shadow_covers_tab(&self) -> bool {
         self.visual_tab_height().is_some() && self.title_tab.config().style.is_title_bar()
     }
 
-    /// The window's own corner radius. Under a bar-style title tab the top corners are square.
+    /// The window's own corner radius. Under a Towns or Mac title bar the top corners are square.
     fn window_radius(&self) -> CornerRadius {
         let mut radius = self.window.geometry_corner_radius();
         if !self.title_tab.is_off() && self.title_tab.config().style.is_title_bar() {
