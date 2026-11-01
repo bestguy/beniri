@@ -44,9 +44,10 @@ No root is needed. It assumes:
 
        ~/.local/bin/beniri --session -c ~/.config/niri/config-beniri.kdl
 
-   To use a different config, pass it as the argument, for example
-   `deploy/install.sh ~/.config/niri/config-towns.kdl`. Running the script
-   again with another config switches the session to it.
+   To use a different config file, pass it as the argument. Running the
+   script again with another config switches the session to it. Note that
+   switching between the tab styles does not need this: all of them are in
+   the one binary, and changing `style` in the config takes effect live.
 
 4. Log out and in. The session now runs the fork.
 
@@ -71,6 +72,17 @@ one is running.
 If your distribution updates its niri package, your session keeps running the
 fork, but the packaged `niri msg` may then be newer than the fork's IPC.
 Rebase the fork onto the new upstream release, rebuild and reinstall.
+
+## Choosing a style
+
+All styles are built into the one binary and selected in the config, which
+niri reloads live, so switching needs no reinstall or re-login:
+
+    layout {
+        title-tab {
+            style "towns"   // or "filled" (default), "outline", "mac"
+        }
+    }
 
 ## Turning the tab off
 

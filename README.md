@@ -1,6 +1,6 @@
 # BeNiri
 
-**This is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.**
+**This is a fork of [niri](https://github.com/niri-wm/niri) with one addition: a BeOS-style title tab above each window.** It can also be styled as an FM TOWNS or classic Macintosh title bar.
 
 ### What the tab does:
 
@@ -43,6 +43,26 @@ The only other changed default is the accent: the focus ring's active color is B
 The tab comes filled in the frame color, or can be configured as an outline joined to the focus ring (`style "outline"`).
 
 <img width="688" alt="The outline style: the focused tab drawn as an outline joined to the focus ring" src="docs/wiki/img/title-tab/border.png">
+
+### Other styles
+
+The same binary draws two more looks. Pick one with the `style` option; it changes live, like any other config edit.
+
+`style "towns"` is an FM TOWNS-style title bar: the tab is followed by a bar across the window, with a gridded close box and a maximize button at the far right.
+
+<!-- TODO: screenshot of the towns style -->
+
+`style "mac"` is a classic Macintosh title bar: white, with the title centered between a close box and a zoom box, and stripes across it while the window is focused.
+
+<!-- TODO: screenshot of the mac style -->
+
+```kdl
+layout {
+    title-tab {
+        style "mac"
+    }
+}
+```
 
 See [Configuration: Title Tab](docs/wiki/Configuration:-Title-Tab.md) for every option, and [deploy/install.md](deploy/install.md) for running the fork alongside stock niri.
 

@@ -4,6 +4,7 @@
 
 The title tab is a small BeOS-style tab drawn by the compositor above the top-left corner of every window.
 It shows the window title, a close button before it and a maximize (zoom) button after it.
+Two further styles turn it into a full-width title bar in the manner of FM TOWNS (`style "towns"`) or the classic Macintosh (`style "mac"`); see [`style`](#style).
 
 * Click the tab to focus the window.
 * Drag the tab to move the window, exactly like dragging it with the move modifier.
@@ -36,6 +37,8 @@ layout {
         join-radius-factor 0.5
         // row-gap 4
         // fill-color "#181818"
+        // bar-color "#e0e0e0"
+        // inactive-bar-color "#c8c8c8"
         close-button
         close-button-size 10
         maximize-button
@@ -64,6 +67,21 @@ Windows are then laid out and drawn exactly as in upstream niri.
 `"outline"` draws a frame-colored line around the tab and joins it to the focus ring with a rounded bend, with the interior in `fill-color`.
 The title text uses the frame color.
 Unfocused windows show only the fill, matching how the focus ring disappears on unfocused windows.
+
+`"towns"` is an FM TOWNS-style title bar.
+The filled tab is followed by a bar that runs to the frame's right edge, filled with `bar-color` and stroked on its top and right in the frame color.
+The close button becomes a gridded box, and the maximize button moves to the bar's right end as an outward-arrows icon.
+On unfocused windows the whole bar, tab included, is filled with `inactive-bar-color`.
+
+`"mac"` is a classic Macintosh title bar.
+It spans the window, is white in every state, and takes the frame color for its top and side lines, title, stripes and boxes.
+The title is centered between a close box on the left and a zoom box on the right, and while the window is focused, stripes run across the bar around them.
+Unfocused windows show only the white bar and the title; the boxes are hidden, and clicking where they were just focuses the window.
+
+In the `"towns"` and `"mac"` styles the window's top corners are square under the bar, the bar's own outer corners are rounded, and the drop shadow covers the bar as well as the window.
+In a tabbed column the tabs split the bar between them and share one frame-colored line where they meet.
+
+Switching `style` is a live config change like any other: edit it, and the running session redraws.
 
 ### `height`
 
@@ -106,11 +124,20 @@ Interior color for the `"outline"` style.
 A transparent color shows the wallpaper through the tab.
 Defaults to a dark gray.
 
+### `bar-color` and `inactive-bar-color`
+
+Colors for the `"towns"` style.
+`bar-color` fills the bar to the right of the tab on the focused window; it defaults to a light gray.
+`inactive-bar-color` fills the whole bar, tab included, on unfocused windows; it defaults to a slightly darker gray.
+An explicit `inactive-color` takes precedence over `inactive-bar-color`.
+
 ### `close-button` and `close-button-size`
 
 `close-button` draws a square outline button before the title; clicking it closes the window.
 `close-button-size` is the square's side in logical pixels.
 Set `close-button false` to hide it.
+
+In the `"towns"` style the square holds a grid of lines, and in the `"mac"` style it is the close box, shown only on the focused window.
 
 ### `maximize-button`
 
@@ -118,6 +145,9 @@ Draws the BeOS zoom button (two overlapping squares) after the title.
 Clicking it toggles the column between its current width and the full width of the screen (`maximize-column`).
 It is not shown on floating windows.
 Set `maximize-button false` to hide it everywhere.
+
+In the `"towns"` style the button sits at the right end of the bar and is drawn as four outward arrows.
+In the `"mac"` style it is the zoom box at the bar's right, shown only on the focused window.
 
 ### Colors
 
@@ -135,11 +165,14 @@ layout {
 ```
 
 `active-text-color`, `inactive-text-color` and `urgent-text-color` set the title text color for each state.
-When unset, the filled style picks black or white by background brightness and the outline style uses the frame color.
+When unset, the filled and towns styles pick black or white by background brightness, and the outline and mac styles use the frame color while a frame is drawn.
+
+The mac style's bar defaults to white instead of the frame color; the colors above recolor the bar if you set them.
+Its lines, stripes, title and boxes always come from the frame, so the classic black-on-white look is a black focus ring: set `active-color "#000000"` in `focus-ring`.
 
 ### Notes
 
 * The tab is hidden while a window is maximized (`maximize-window-to-edges`) or fullscreen, and comes back when it leaves that state.
-* The drop shadow (`layout { shadow {} }`) wraps the window but not the tab yet.
+* The drop shadow (`layout { shadow {} }`) covers the bar in the towns and mac styles. In the filled and outline styles it wraps the window but not the tab yet.
 * There is no per-window rule to disable the tab yet; `off` is global.
 * With Dank Material Shell or another tool that writes the focus ring colors, the tab follows the theme automatically because it inherits from the ring.
