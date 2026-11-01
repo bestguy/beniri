@@ -37,8 +37,8 @@ layout {
         join-radius-factor 0.5
         // row-gap 4
         // fill-color "#181818"
-        // bar-color "#e0e0e0"
-        // inactive-bar-color "#c8c8c8"
+        // bar-color "#8cbdef"
+        // inactive-bar-color "#ffffff"
         close-button
         close-button-size 10
         maximize-button
@@ -68,10 +68,11 @@ Windows are then laid out and drawn exactly as in upstream niri.
 The title text uses the frame color.
 Unfocused windows show only the fill, matching how the focus ring disappears on unfocused windows.
 
-`"towns"` is an FM TOWNS-style title bar.
-The filled tab is followed by a bar that runs to the frame's right edge, filled with `bar-color` and stroked on its top and right in the frame color.
+`"towns"` is a Towns OS-style title bar.
+The tab is followed by a bar that runs to the frame's right edge, filled with `bar-color` and stroked on its top and right in the frame color.
 The close button becomes a gridded box, and the maximize button moves to the bar's right end as an outward-arrows icon.
 On unfocused windows the whole bar, tab included, is filled with `inactive-bar-color`.
+By default the focused tab is white and the bar light blue, and unfocused bars are white.
 
 `"mac"` is a classic Macintosh title bar.
 It spans the window, is white in every state, and takes the frame color for its top and side lines, title, stripes and boxes.
@@ -79,6 +80,8 @@ The title is centered between a close box on the left and a zoom box on the righ
 Unfocused windows show only the white bar and the title; the boxes are hidden, and clicking where they were just focuses the window.
 
 In the `"towns"` and `"mac"` styles the window's top corners are square under the bar, the bar's own outer corners are rounded, and the drop shadow covers the bar as well as the window.
+Both draw their lines in the focus ring color, so with either style the ring's default `active-color` is black instead of the fork's BeOS yellow.
+A ring color or gradient you set yourself is used as is.
 In a tabbed column the tabs split the bar between them and share one frame-colored line where they meet.
 
 Switching `style` is a live config change like any other: edit it, and the running session redraws.
@@ -127,8 +130,8 @@ Defaults to a dark gray.
 ### `bar-color` and `inactive-bar-color`
 
 Colors for the `"towns"` style.
-`bar-color` fills the bar to the right of the tab on the focused window; it defaults to a light gray.
-`inactive-bar-color` fills the whole bar, tab included, on unfocused windows; it defaults to a slightly darker gray.
+`bar-color` fills the bar to the right of the tab on the focused window; it defaults to a light blue (`#8cbdef`).
+`inactive-bar-color` fills the whole bar, tab included, on unfocused windows; it defaults to white.
 An explicit `inactive-color` takes precedence over `inactive-bar-color`.
 
 ### `close-button` and `close-button-size`
@@ -167,8 +170,9 @@ layout {
 `active-text-color`, `inactive-text-color` and `urgent-text-color` set the title text color for each state.
 When unset, the filled and towns styles pick black or white by background brightness, and the outline and mac styles use the frame color while a frame is drawn.
 
-The mac style's bar defaults to white instead of the frame color; the colors above recolor the bar if you set them.
-Its lines, stripes, title and boxes always come from the frame, so the classic black-on-white look is a black focus ring: set `active-color "#000000"` in `focus-ring`.
+The mac style's bar, and the towns style's focused tab, default to white instead of the frame color; the colors above recolor them if you set them.
+Lines, stripes and boxes always come from the frame, which is why the focus ring defaults to black for these two styles.
+Set `active-color` in `focus-ring` to pick another line color.
 
 ### Notes
 

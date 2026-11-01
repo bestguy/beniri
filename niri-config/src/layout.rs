@@ -59,6 +59,26 @@ impl Default for Layout {
     }
 }
 
+impl Layout {
+    /// Fork: gives the title bar styles a frame that suits them.
+    ///
+    /// The fork's focus ring defaults to BeOS yellow for the tab styles, but the Towns and Mac
+    /// bars draw their lines in the ring color and want black. When the ring's active color is
+    /// still that default and no gradient is set, it becomes black; an explicit color is kept.
+    /// Called once the whole config, includes and all, has been merged.
+    pub fn apply_title_tab_style_defaults(&mut self) {
+        if self.title_tab.off || !self.title_tab.style.is_title_bar() {
+            return;
+        }
+
+        let ring = &mut self.focus_ring;
+        if ring.active_gradient.is_none() && ring.active_color == FocusRing::default().active_color
+        {
+            ring.active_color = Color::from_rgba8_unpremul(0, 0, 0, 255);
+        }
+    }
+}
+
 impl MergeWith<LayoutPart> for Layout {
     fn merge_with(&mut self, part: &LayoutPart) {
         merge!(

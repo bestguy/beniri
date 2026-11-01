@@ -44,24 +44,21 @@ In a tabbed column the bar is split between the windows, with stripes and boxes 
 
 <img width="778" alt="A tabbed column of three windows as segments of one Macintosh title bar, with the first segment striped and focused" src="docs/wiki/img/title-tab/mac-tabs.png">
 
-The bar takes its lines from the focus ring, so the classic black-on-white look is a black `active-color`:
-
 ```kdl
 layout {
-    focus-ring {
-        active-color "#000000"
-    }
     title-tab {
         style "mac"
     }
 }
 ```
 
+The bar's lines take the focus ring color, so choosing this style also turns the ring's default from BeOS yellow to black. Set your own `active-color` in `focus-ring` for anything else.
+
 ### TownsOS
 
 *(Q: Wut?  A: The FM Towns was a line of Fujitsu PCs from the late 80s and early 90s, and Towns OS was its operating system.)*
 
-`style "towns"` is a Towns OS-style title bar: the tab is followed by a bar across the window, with a gridded close box and a maximize button at the far right. Unfocused windows get a plain gray bar.
+`style "towns"` is a Towns OS-style title bar: the tab is followed by a bar across the window, with a gridded close box and a maximize button at the far right. Unfocused windows get a plain white bar.
 
 <img width="837" alt="A focused settings window with a Towns OS title bar: a white tab with a gridded close box and the title, then a light blue bar ending in a maximize button, above an unfocused window with a plain bar" src="docs/wiki/img/title-tab/towns.png">
 
@@ -73,6 +70,19 @@ In a tabbed column the tabs sit side by side at the start of the bar.
 layout {
     title-tab {
         style "towns"
+    }
+}
+```
+
+As with the Mac style, the ring defaults to black here. The tab and bar colors shown above are the defaults; these options change them:
+
+```kdl
+layout {
+    title-tab {
+        style "towns"
+        active-color "#ffffff"       // the focused tab
+        bar-color "#8cbdef"          // the bar after it
+        inactive-bar-color "#ffffff" // tab and bar on unfocused windows
     }
 }
 ```

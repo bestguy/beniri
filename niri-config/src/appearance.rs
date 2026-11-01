@@ -1398,9 +1398,9 @@ pub struct TitleTab {
     /// Interior color for the outline style. A transparent fill shows the wallpaper through the
     /// tab. Defaults to a dark gray.
     pub fill_color: Option<Color>,
-    /// Towns style: interior of the bar right of the active tab. Defaults to a light gray.
+    /// Towns style: interior of the bar right of the active tab. Defaults to a light blue.
     pub bar_color: Option<Color>,
-    /// Towns style: fill of the whole bar, tab included, on inactive windows.
+    /// Towns style: fill of the whole bar, tab included, on inactive windows. Defaults to white.
     pub inactive_bar_color: Option<Color>,
     /// Whether to draw a close button before the title.
     pub close_button: bool,

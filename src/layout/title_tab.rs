@@ -30,9 +30,11 @@ use crate::utils::to_physical_precise_round;
 /// Largest texture dimension we'll ask the GPU for.
 const MAX_TEXTURE_SIZE: i32 = 16383;
 
-/// Towns style defaults for `bar-color` and `inactive-bar-color`.
-const DEFAULT_BAR_COLOR: [u8; 3] = [224, 224, 224];
-const DEFAULT_INACTIVE_BAR_COLOR: [u8; 3] = [200, 200, 200];
+/// Towns style defaults: a white tab on a light blue bar, and a white bar on inactive windows.
+/// The lines come from the frame, which the config defaults to black for this style.
+const DEFAULT_TOWNS_TAB_COLOR: [u8; 3] = [255, 255, 255];
+const DEFAULT_BAR_COLOR: [u8; 3] = [140, 189, 239];
+const DEFAULT_INACTIVE_BAR_COLOR: [u8; 3] = [255, 255, 255];
 
 /// Mac style defaults: a white bar, and five stripes across it while the window is active.
 const DEFAULT_MAC_COLOR: [u8; 3] = [255, 255, 255];
@@ -483,6 +485,10 @@ impl TitleTab {
             .unwrap_or_else(|| {
                 if is_mac {
                     let [r, g, b] = DEFAULT_MAC_COLOR;
+                    Gradient::from(Color::from_rgba8_unpremul(r, g, b, 255))
+                } else if is_towns && !is_urgent {
+                    // The active Towns tab is white by default rather than the frame color.
+                    let [r, g, b] = DEFAULT_TOWNS_TAB_COLOR;
                     Gradient::from(Color::from_rgba8_unpremul(r, g, b, 255))
                 } else {
                     frame.gradient

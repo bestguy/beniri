@@ -526,7 +526,11 @@ impl Config {
         let includes = includes.take().0;
         let include_errors = include_errors.take().0;
         let config = part
-            .map(|_| config.take())
+            .map(|_| {
+                let mut config = config.take();
+                config.layout.apply_title_tab_style_defaults();
+                config
+            })
             .map_err(move |err| ConfigIncludeError {
                 main: err,
                 includes: include_errors,
@@ -657,6 +661,52 @@ mod tests {
         Config::parse_mem(text)
             .map_err(miette::Report::new)
             .unwrap()
+    }
+
+    #[test]
+    fn title_bar_styles_default_to_a_black_focus_ring() {
+        let yellow = Color::from_rgba8_unpremul(255, 203, 0, 255);
+        let black = Color::from_rgba8_unpremul(0, 0, 0, 255);
+
+        // The tab styles keep the fork's yellow ring.
+        let parsed = do_parse("");
+        assert_eq!(parsed.layout.focus_ring.active_color, yellow);
+        let parsed = do_parse(r#"layout { title-tab { style "outline" } }"#);
+        assert_eq!(parsed.layout.focus_ring.active_color, yellow);
+
+        // The bar styles get a black ring out of the box.
+        for style in ["towns", "mac"] {
+            let parsed = do_parse(&format!(r#"layout {{ title-tab {{ style "{style}" }} }}"#));
+            assert_eq!(parsed.layout.focus_ring.active_color, black, "{style}");
+        }
+
+        // An explicit ring color, or gradient, is left alone.
+        let parsed = do_parse(
+            r##"
+            layout {
+                focus-ring { active-color "#ff0000" }
+                title-tab { style "mac" }
+            }
+            "##,
+        );
+        assert_eq!(
+            parsed.layout.focus_ring.active_color,
+            Color::from_rgba8_unpremul(255, 0, 0, 255)
+        );
+        let parsed = do_parse(
+            r##"
+            layout {
+                focus-ring { active-gradient from="#ffcb00" to="#74c7ec" }
+                title-tab { style "towns" }
+            }
+            "##,
+        );
+        assert_eq!(parsed.layout.focus_ring.active_color, yellow);
+        assert!(parsed.layout.focus_ring.active_gradient.is_some());
+
+        // Turning the tab off restores the stock ring color.
+        let parsed = do_parse(r#"layout { title-tab { off; style "mac" } }"#);
+        assert_eq!(parsed.layout.focus_ring.active_color, yellow);
     }
 
     #[test]
